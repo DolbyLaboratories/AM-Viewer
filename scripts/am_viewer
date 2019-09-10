@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+import am_viewer.am_viewer
+am_viewer.am_viewer.main()
