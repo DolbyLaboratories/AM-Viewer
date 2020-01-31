@@ -5,6 +5,17 @@
 
 This is a python based realtime viewer for PMD, Serial ADM and AES-X242. Once running the viewer can detect real-time changes in the metadata and display them in real-time. The purpose of the viewer is to be able to demonstrate the real-time capabilities of the various formats by allowing the dynamic behaviour to be viewed. The viewer also supports static display of the underlying XML representation.
 
+The User interface has three main sections:
+- Audio Beds
+- Audio Objects
+- Presentations
+
+The audio beds section provides a list of the main audio scenes available. These will normally be channel based and will have a configuration such as 5.1 or 5.1.4 for 5.1 with 4 overhead channels. Normally there will only be a single bed but certain use-cases make use of two beds such as home and away crowd sounds for a live sports broadcast.
+
+If the audio bed does not contain the complete audio program and only contains music and effects then additional objects will be required and will be listed in the middle section of the user interface. This will normally include dialogue objects. This is very common where multiple language support is required. Objects that specify divergence signal to the downstream renderer that the object should be rendered as two discrete sound sources left and right of the intended position. This effect is sometimes used for dialogue objects.
+
+The list of presentations represent a set configurations that could be made available to use. Each presentation specifies a bed and selection of objects or elements to be included. Each presentation has a name and the language used for the name is specified as well as the language of the audio itself which is specified as the presentation language. Each presentation can be monitored by pressing the buttons on the left hand side. If the buttons are not enabled then GStreamer has not been detected as being installed. Pressing a button twice switches the audio off. The audio playback will react to changes in gain and object X position. Changes in object Y and Z position can not be detected as only stereo playback is supported.
+
 ## General System Requirements
 
 MacOS, Windows and Linux supported.
@@ -65,7 +76,7 @@ Several indicators on the bottom bar show status. The PMD indicator will be gree
 ## License
 
  AM Viewer
- Copyright (c) 2019, Dolby Laboratories Inc.
+ Copyright (c) 2020, Dolby Laboratories Inc.
  All rights reserved.
  
  Redistribution and use in source and binary forms, with or without modification, are permitted
