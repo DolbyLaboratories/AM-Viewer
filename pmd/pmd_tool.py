@@ -563,6 +563,9 @@ def parse_pmd_xml(xml_struct, mode):
     if iat_root is not None:
         xml_iat_content_id_list = iat_root.findall(PMD_XML_ROOT_SE_PMD_SE_IAT_SE_CID)
         xml_iat_timestamp_list = iat_root.findall(PMD_XML_ROOT_SE_PMD_SE_IAT_SE_TST)
+    else:
+    	xml_iat_content_id_list = []
+    	xml_iat_timestamp_list = []
 
     return populate_model_from_xml(xml_audio_signal_list, xml_audio_bed_list, xml_audio_object_list,
                                    xml_audio_presentation_list, xml_iat_content_id_list, xml_iat_timestamp_list)
@@ -677,7 +680,8 @@ def populate_model_from_xml(xml_signals, xml_beds, xml_objects, xml_presentation
         i += 1
 
     # IAT, there should only be one IAT payload in the list, add error checking for this
-    iat_list.append(IaT(get_element_text(xml_iat_cid[0], PMD_XML_ROOT_SE_PMD_SE_IAT_SE_UUI), int(xml_iat_time[0].text)))
+    if len(xml_iat_cid) > 0 and len(xml_iat_time) > 0:
+    	iat_list.append(IaT(get_element_text(xml_iat_cid[0], PMD_XML_ROOT_SE_PMD_SE_IAT_SE_UUI), int(xml_iat_time[0].text)))
 
     # Package all the data together into a professional metadata container
     k = ProfessionalMetadata(PMD_XML_ROOT_SE_PMD_AT_VER_VAL)
