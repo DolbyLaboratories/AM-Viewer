@@ -28,11 +28,25 @@ See https://scapy.readthedocs.io/en/latest/installation.html
 
 Because packet sniffing is used to receive the stream, the application requires elevated permissions i.e. sudo to run. Future versions will not have this restriction.
 
+## Audio Playback Support System Requirements
+
+To use the audio playback feature, GStreamer must be installed. This will be detected on startup and the presentation selection buttons will be enabled. Make sure that gst-launch-1.0 is in the path.
+
+### Windows GStreamer installation
+
+See https://gstreamer.freedesktop.org/documentation/installing/on-windows.html and https://gstreamer.freedesktop.org/data/pkg/windows/. Any package type should work although msvs was used for testing
+
+### Mac OS GStreamer installation
+
+The easiest way is to install home brew and then use `brew install gstreamer gst-plugins-base gst-plugins-good`
+
+### Linux (Ubuntu) installation
+
+Ubuntu generally comes with GStreamer preinstalled. If not then `sudo apt-get install gstreamer1.0-tools`
+
 ## Installation
 
-
-In the dist directory is a wheel file. Install using pip3 like this: pip3 install dist/pmd_viewer-1.1-py3-none-any.whl
-The contents of this directory can be copied and the tool run directly in which case dependencies must be satisfied manually.
+pip3 install am_viewer
 
 ## Instructions
 
