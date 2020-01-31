@@ -50,6 +50,10 @@ class MulticastGroup:
         # create socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # Not all platforms support REUSEPORT i.e. Windows does not
+        # The linux check below won't always work e.g. 3.10 will fail but it is close enough
+        if platform.system() == 'Darwin' or (platform.system() == 'Linux' and platform.release() > "3.9"):
+            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(self.localIp))
         self.sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
         membership_request = socket.inet_aton(self.address) + socket.inet_aton(self.localIp)

@@ -76,3 +76,6 @@ class sdp_parser:
 
     def isAESX242(self):
         return(self.codec == "smpte336m")
+
+    def isAES67(self):
+        return(self.codec == "L16" or self.codec == "L24")
