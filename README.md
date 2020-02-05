@@ -42,6 +42,7 @@ As well as Python, some distros may require Tkinter to be installed e.g. on Ubun
 Before running allow python and tcpdump to open raw sockets. Failure to do this will result in permission problems when packet reception is attempted.
 
 `setcap cap_net_raw=eip <python executable>`
+
 `setcap cap_net_raw=eip <tcpdump executable> (normally /usr/sbin/tcpdump)`
 
 ## Audio Playback Support System Requirements
