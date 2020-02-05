@@ -37,7 +37,11 @@ See https://scapy.readthedocs.io/en/latest/installation.html
 
 ## Linux Requirements
 
+As well as Python, some distros may require Tkinter to be installed e.g. on Ubuntu: `sudo apt-get install python3-tk`
+
 Because packet sniffing is used to receive the stream, the application requires elevated permissions i.e. sudo to run. Future versions will not have this restriction.
+`sudo pip3 install am_viewer`
+`sudo am_viewer`
 
 ## Audio Playback Support System Requirements
 
