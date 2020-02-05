@@ -41,8 +41,8 @@ As well as Python, some distros may require Tkinter to be installed e.g. on Ubun
 
 Before running allow python and tcpdump to open raw sockets. Failure to do this will result in permission problems when packet reception is attempted.
 
-setcap cap_net_raw=eip <python executable>
-setcap cap_net_raw=eip <tcpdump executable> (normally /usr/sbin/tcpdump)
+`setcap cap_net_raw=eip <python executable>`
+`setcap cap_net_raw=eip <tcpdump executable> (normally /usr/sbin/tcpdump)`
 
 ## Audio Playback Support System Requirements
 
@@ -62,11 +62,11 @@ Ubuntu generally comes with GStreamer preinstalled. If not then `sudo apt-get in
 
 ## Installation
 
-pip3 install am_viewer
+`pip3 install am_viewer`
 
 ## Instructions
 
-If installed type 'am_viewer'. If not installed, execute the run script.
+If installed type `am_viewer`. If not installed, execute the run script.
 
 The viewer can use either an XML or a IP stream as input. To use a file as input use the -xml option to specify the filename. If a stream is used as input then there are two possible ways for the viewer to obtain RTP session information. Either an SDP file can be provided using the -sdp option or the stream can be discovered using the Ravenna discovery protocol (Bonjour & RTSP).
 
