@@ -20,7 +20,7 @@ The list of presentations represent a set configurations that could be made avai
 
 MacOS, Windows and Linux supported.
 
-Python 3 (Tested with Python v3.7.2 from python.org)
+Python 3 (Tested with Python v3.8.1 from python.org)
 
 Python Modules (install using PIP)
 scapy, zeroconf, netifaces
@@ -34,6 +34,7 @@ NPcap (https://nmap.org/npcap/)
 ## Mac OS Requirements
 
 See https://scapy.readthedocs.io/en/latest/installation.html
+Use python from python.org, not Homebrew.
 
 ## Linux Requirements
 
@@ -55,7 +56,7 @@ See https://gstreamer.freedesktop.org/documentation/installing/on-windows.html a
 
 ### Mac OS GStreamer installation
 
-The easiest way is to install home brew and then use `brew install gstreamer gst-plugins-base gst-plugins-good`
+The easiest way is to install Homebrew and then use `brew install gstreamer gst-plugins-base gst-plugins-good`
 
 ### Linux (Ubuntu) installation
 
