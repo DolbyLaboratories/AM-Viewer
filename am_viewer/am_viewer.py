@@ -57,7 +57,11 @@ from pmd.pmd_const import PRESENTATION_CONFIG_TEXT
 from pmd.pmd_const import PRESENTATION_CONFIG_EQUIV
 from pmd.pmd_const import LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES
 from pmd.pmd_const import LOUDSPEAKER_CONFIG_2_0
+from pmd.pmd_const import LOUDSPEAKER_CONFIG_3_0
 from pmd.pmd_const import LOUDSPEAKER_CONFIG_5_1
+from pmd.pmd_const import LOUDSPEAKER_CONFIG_5_1_2
+from pmd.pmd_const import LOUDSPEAKER_CONFIG_5_1_4
+from pmd.pmd_const import LOUDSPEAKER_CONFIG_7_1_4
 from pmd.pmd_const import OBJECT_CLASSES
 from am_viewer.am_xml_viewer import XML_Viewer
 from am_viewer.am_xml_viewer import isFilePmd
@@ -65,7 +69,7 @@ from am_viewer.am_xml_viewer import isFileSADM
 import aoip_services.aoip_discovery
 import aoip_services.multicast
 
-__version__ = "3.0"
+__version__ = "3.2"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -88,8 +92,9 @@ class AudioBedHeadings:
     SOURCE = 0
     CONFIG = 1
     NAME = 2
-    START = 3
-    END = 4
+    GAIN = 3
+    START = 4
+    END = 5
 
 
 # Helper functions
@@ -724,7 +729,7 @@ class PmdAdmDisplayGUI:
 
     numObjects = 6
     numPresentations = 6
-    numBeds = 2
+    numBeds = 4
     frameRelief = RAISED
     frameBg = "blue"
     frameBorderwidth = 5
@@ -866,23 +871,23 @@ class PmdAdmDisplayGUI:
         self.abFrame = Frame(master, relief= self.frameRelief, borderwidth=self.frameBorderwidth)
         self.abFrame.pack(fill=BOTH, expand=True)
 
-        abLabels = [ "Source", "Config", "Name", "Start", "End" ]
+        abLabels = [ "Source", "Config", "Name", "Gain(dB)", "Start", "End" ]
 
-        for abColumn in range(1,6):
+        for abColumn in range(1,7):
             abLabel = Label(self.abFrame, text = abLabels[abColumn - 1])
             abLabel.grid(row = 0, column = abColumn)
 
-        self.bedFields = [[], []]
+        self.bedFields = [[] for i in range(self.numBeds + 1)]
         for bed in range(0,self.numBeds):
 
             bed_label = Label(self.abFrame, text = str(bed+1))
             bed_label.grid(row = bed + 1, column = 0)
 
-            for abColumn in range(1,6):
+            for abColumn in range(1,7):
                 self.bedFields[bed].append(Label(self.abFrame, text = "None", relief=SUNKEN, bg = '#B3B4C8'))
                 self.bedFields[bed][-1].grid(row = bed + 1, column = abColumn, sticky=N+E+S+W)
 
-        for abColumn in range(0,6):
+        for abColumn in range(0,7):
             self.abFrame.grid_columnconfigure(abColumn,minsize = 100)
 
         audio_objects_label = Label(master, text="Audio Objects")
@@ -1038,7 +1043,6 @@ class PmdAdmDisplayGUI:
         try:
         	shellState = (platform.system() == "Windows")
         	self.haveGstreamer = ((subprocess.call(["gst-launch-1.0", "--version"], shell=shellState, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)) == 0)
-        	print(self.haveGstreamer)
         except OSError as e:
         	if e.errno == errno.ENOENT:
         		self.haveGstreamer = False
@@ -1048,7 +1052,11 @@ class PmdAdmDisplayGUI:
         		self.haveGstreamer = False
 
     def post(self, command, data):
-        self.messageQueue.put([command,data])
+        # If the packet processor is running faster than the UI background task
+        # then UI updates are dropped
+        # This avoids the UI lagging behind and a memory leak with an ever increasing queue of models
+        if self.messageQueue.qsize() < 5 or command != "updateModel":
+            self.messageQueue.put([command,data])
 
     def messageWaiting(self):
         return not self.messageQueue.empty()
@@ -1137,8 +1145,11 @@ class PmdAdmDisplayGUI:
         launchstr = 'udpsrc address=' + self.audioService.sdp.address + ' port=' + str(self.audioService.sdp.port) + \
                     ' buffer-size=' + str(buffer_size) + ' caps="application/x-rtp, media=(string)audio, clock-rate=(int)' + \
                     str(self.audioService.sdp.fs) + ', channels = ' + str(self.audioService.sdp.channels) + ', encoding-name=(string)' + \
-                    self.audioService.sdp.codec + '" ! rtp' + self.audioService.sdp.codec + 'depay ! audio/x-raw,channels=' + \
-                    str(self.audioService.sdp.channels) + ',channel-mask=(bitmask)0x000000000000 ! audioconvert mix-matrix="<<'
+                    self.audioService.sdp.codec + '" ! rtp' + self.audioService.sdp.codec + 'depay '
+        if self.audioService.sdp.channels > 8:
+                    launchstr = launchstr + '! audio/x-raw,channels=' + \
+                    str(self.audioService.sdp.channels) + ',channel-mask=(bitmask)0x000000000000 '
+        launchstr = launchstr + '! audioconvert mix-matrix="<<'
         for outchan in [0, 1]:
             for inchan in range(self.audioService.sdp.channels):
                 launchstr = launchstr + '(float)' + str(self.mixMatrix[outchan][inchan]) + ', '
@@ -1158,29 +1169,59 @@ class PmdAdmDisplayGUI:
         newMixMatrix = [[0] * self.audioService.sdp.channels, [0] * self.audioService.sdp.channels]
         m3db = 0.7071
         bedCount = 0
+        # audioScale is a value to ensure that matrix coefficients can never exceed 1.0
+        # This is a universal gain that is determined by calculating worst case for a coefficient (currently +6dB)
+        # and ensuring that this worst case is still less than < 1.0
+        audioScale = 0.5011 # -6dB
         # If presentation was deleted then the playbackPres may be now invalid
         if self.playbackPres > len(self.model.audio_presentations):
             return False
         for element in self.model.audio_presentations[self.playbackPres - 1].elements:
             if type(element) is AudioBed and bedCount < self.numBeds:
                 # We have a bed so mix
-                startChannel = element.output_targets[0].audio_signals[0].id - 1
-                endChannel = element.output_targets[0].audio_signals[0].id + \
-                             PRESENTATION_CONFIG_EQUIV[PRESENTATION_CONFIG_TEXT.index(element.speaker_config)] - 2
+                startChannel = int(element.output_targets[0].audio_signals[0].id - 1)
+                endChannel = int(element.output_targets[0].audio_signals[0].id + \
+                             PRESENTATION_CONFIG_EQUIV[PRESENTATION_CONFIG_TEXT.index(element.speaker_config)] - 2)
                 # Check that bed does not extend beyond audio service
                 if endChannel <= startChannel or endChannel > self.audioService.sdp.channels:
                     return False
+                bedAudioScale = audioScale * gain_from_db(element.gain_db)
                 if element.speaker_config == LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[LOUDSPEAKER_CONFIG_2_0]:
-                    newMixMatrix[0][startChannel] = 1.0
-                    newMixMatrix[1][startChannel + 1] = 1.0
+                    newMixMatrix[0][startChannel] = bedAudioScale 
+                    newMixMatrix[1][startChannel + 1] = bedAudioScale 
+                elif element.speaker_config == LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[LOUDSPEAKER_CONFIG_3_0]:
+                    newMixMatrix[0][startChannel] = bedAudioScale 
+                    newMixMatrix[1][startChannel + 1] = bedAudioScale 
+                    newMixMatrix[0][startChannel + 2] = m3db * bedAudioScale 
+                    newMixMatrix[1][startChannel + 2] = m3db * bedAudioScale 
                 elif element.speaker_config == LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[LOUDSPEAKER_CONFIG_5_1]:
-                    newMixMatrix[0][startChannel] = 1.0
-                    newMixMatrix[1][startChannel + 1] = 1.0
-                    newMixMatrix[0][startChannel + 2] = m3db
-                    newMixMatrix[1][startChannel + 2] = m3db
-                    newMixMatrix[0][startChannel + 4] = m3db
-                    newMixMatrix[1][startChannel + 5] = m3db
+                    newMixMatrix[0][startChannel] = bedAudioScale 
+                    newMixMatrix[1][startChannel + 1] = bedAudioScale 
+                    newMixMatrix[0][startChannel + 2] = m3db * bedAudioScale
+                    newMixMatrix[1][startChannel + 2] = m3db * bedAudioScale
+                    newMixMatrix[0][startChannel + 4] = m3db * bedAudioScale
+                    newMixMatrix[1][startChannel + 5] = m3db * bedAudioScale
                 # unsupported bed configuration
+                elif element.speaker_config == LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[LOUDSPEAKER_CONFIG_5_1_2]:
+                    newMixMatrix[0][startChannel] = bedAudioScale
+                    newMixMatrix[1][startChannel + 1] = bedAudioScale
+                    newMixMatrix[0][startChannel + 2] = m3db * bedAudioScale
+                    newMixMatrix[1][startChannel + 2] = m3db * bedAudioScale
+                    newMixMatrix[0][startChannel + 4] = m3db * bedAudioScale
+                    newMixMatrix[1][startChannel + 5] = m3db * bedAudioScale
+                    newMixMatrix[0][startChannel + 6] = 0.5 * bedAudioScale
+                    newMixMatrix[1][startChannel + 7] = 0.5 * bedAudioScale
+                elif element.speaker_config == LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[LOUDSPEAKER_CONFIG_5_1_4]:
+                    newMixMatrix[0][startChannel] = bedAudioScale
+                    newMixMatrix[1][startChannel + 1] = bedAudioScale
+                    newMixMatrix[0][startChannel + 2] = m3db * bedAudioScale
+                    newMixMatrix[1][startChannel + 2] = m3db * bedAudioScale
+                    newMixMatrix[0][startChannel + 4] = m3db * bedAudioScale
+                    newMixMatrix[1][startChannel + 5] = m3db * bedAudioScale
+                    newMixMatrix[0][startChannel + 6] = 0.5 * bedAudioScale
+                    newMixMatrix[1][startChannel + 7] = 0.5 * bedAudioScale
+                    newMixMatrix[0][startChannel + 8] = 0.5 * bedAudioScale
+                    newMixMatrix[1][startChannel + 9] = 0.5 * bedAudioScale
                 else:
                     return False
             if type(element) == AudioObject:
@@ -1189,8 +1230,8 @@ class PmdAdmDisplayGUI:
                     return False
                 # Calculate Lo & Ro gains from X,Y,Z
                 yz_prod = ((0.207 * element.elevation_or_y) + 0.5) * (m3db - (m3db * element.distance_or_z))
-                newMixMatrix[0][element.audio_signal.id - 1] = (0.603 - (0.603 * element.azimuth_or_x)) * yz_prod * gain_from_db(element.source_gain_db)
-                newMixMatrix[1][element.audio_signal.id - 1] = (0.603 + (0.603 * element.azimuth_or_x)) * yz_prod * gain_from_db(element.source_gain_db)
+                newMixMatrix[0][element.audio_signal.id - 1] = (0.603 - (0.603 * element.azimuth_or_x)) * yz_prod * gain_from_db(element.source_gain_db) * audioScale
+                newMixMatrix[1][element.audio_signal.id - 1] = (0.603 + (0.603 * element.azimuth_or_x)) * yz_prod * gain_from_db(element.source_gain_db) * audioScale
 
         # If pipeline is not playing or matrix has changed size then
         if not self.playing():
@@ -1230,11 +1271,11 @@ class PmdAdmDisplayGUI:
 
     def stop_playback(self):
         if self.audioPipeLine is not None:
-        	if (platform.system() == "Windows"):
-        		subprocess.call(['taskkill', '/F', '/T', '/PID', str(self.audioPipeLine.pid)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        	else:
-        		os.kill(self.audioPipeLine.pid, signal.SIGSTOP)
-        		os.kill(self.audioPipeLine.pid, signal.SIGKILL)
+            if (platform.system() == "Windows"):
+                subprocess.call(['taskkill', '/F', '/T', '/PID', str(self.audioPipeLine.pid)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            else:
+                os.kill(self.audioPipeLine.pid, signal.SIGSTOP)
+                os.kill(self.audioPipeLine.pid, signal.SIGKILL)
         self.audioPipeLine = None
 
     def reset_ui(self):
@@ -1247,6 +1288,7 @@ class PmdAdmDisplayGUI:
                 self.bedFields[ununsedBeds][AudioBedHeadings.SOURCE].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.CONFIG].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.NAME].configure(text="")
+                self.bedFields[ununsedBeds][AudioBedHeadings.GAIN].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.START].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.END].configure(text="")
 
@@ -1345,6 +1387,7 @@ class PmdAdmDisplayGUI:
                 self.bedFields[bedCount][AudioBedHeadings.SOURCE].configure(text="Direct")
                 self.bedFields[bedCount][AudioBedHeadings.CONFIG].configure(text=element.speaker_config)
                 self.bedFields[bedCount][AudioBedHeadings.NAME].configure(text=element.name)
+                self.bedFields[bedCount][AudioBedHeadings.GAIN].configure(text=element.gain_db)
                 self.bedFields[bedCount][AudioBedHeadings.START].configure(text=element.output_targets[0].audio_signals[0].id)
                 self.bedFields[bedCount][AudioBedHeadings.END].configure(text=element.output_targets[0].audio_signals[0].id +
                     PRESENTATION_CONFIG_EQUIV[PRESENTATION_CONFIG_TEXT.index(element.speaker_config)] - 1)
@@ -1354,6 +1397,7 @@ class PmdAdmDisplayGUI:
                 self.bedFields[ununsedBeds][AudioBedHeadings.SOURCE].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.CONFIG].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.NAME].configure(text="")
+                self.bedFields[ununsedBeds][AudioBedHeadings.GAIN].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.START].configure(text="")
                 self.bedFields[ununsedBeds][AudioBedHeadings.END].configure(text="")
 
@@ -1594,5 +1638,4 @@ def main():
 #	root.mainloop()
 
 if __name__ == '__main__':
-    print("Starting...")
     main()
