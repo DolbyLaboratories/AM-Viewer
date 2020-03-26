@@ -149,6 +149,7 @@ from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG
 from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG
 from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG_SE_ASG
 from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG_SE_ASG_SE_IDS
+from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG_SE_ASG_SE_GAN
 
 from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO
 from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_NME
@@ -188,6 +189,9 @@ import xml.dom.minidom as minidom
 import tracemalloc
 
 # ADM bits and pieces
+
+
+
 from adm.adm_tool import parse_adm_xml
 from adm.adm_const import ADM_XML_MODE_FILE, ADM_XML_INT_TYP_DS, ADM_XML_INT_TYP_OB
 from adm.adm_const import NON_DIALOGUE_CONTENT, DIALOGUE_CONTENT, MIXED_CONTENT
@@ -196,6 +200,7 @@ from adm.adm_const import ADM_NON_DIALOGUE_CONTENT_KIND, ADM_DIALOGUE_CONTENT_KI
 from adm.adm_const import ADM_DIALOGUE_CONTENT_KIND_UNDEFINED, ADM_DIALOGUE_CONTENT_KIND_DIALOGUE, ADM_DIALOGUE_CONTENT_KIND_VOICEOVER
 from adm.adm_const import ADM_DIALOGUE_CONTENT_KIND_SPOKEN_SUBTITLE, ADM_DIALOGUE_CONTENT_KIND_AUDIO_DESCRIPTION, ADM_DIALOGUE_CONTENT_KIND_COMMENTARY
 from adm.adm_const import ADM_DIALOGUE_CONTENT_KIND_EMERGENCY
+
 
 # Globals to keep track of ID allocation, lists etc.
 
@@ -338,9 +343,9 @@ def create_object(name, classification, dynamic_updates, azimuth_or_x, elevation
     return audio_object_list
 
 
-def create_audio_bed(obj_name, loudspeaker_configuration, start_audio_signal, original_id=0):
+def create_audio_bed(obj_name, loudspeaker_configuration, start_audio_signal, original_id=0, gain_db=0.0):
     global audio_element_counter, audio_bed_counter, audio_signal_counter, audio_bed_list, audio_element_list
-    # TODO add support for output targets to have more than one audio signal + gain attribute, i.e. support beyond direct beds
+    # TODO add support for output targets to have more than one audio signal i.e. support beyond direct beds
 
     # Check parameter types
     check_parameter_type(obj_name, str, create_audio_bed)
@@ -361,9 +366,9 @@ def create_audio_bed(obj_name, loudspeaker_configuration, start_audio_signal, or
 
     # Create audio bed reference in audio bed list. If reading from XML then optional original_id param should be non zero
     if original_id > 0:
-        audio_bed_list.append(AudioBed(original_id, obj_name, LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[i]))
+        audio_bed_list.append(AudioBed(original_id, obj_name, LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[i], gain_db))
     else:
-        audio_bed_list.append(AudioBed(audio_element_counter + 1, obj_name, LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[i]))
+        audio_bed_list.append(AudioBed(audio_element_counter + 1, obj_name, LOUDSPEAKER_CONFIG_COMMON_USE_TEXT_NAMES[i], gain_db))
 
     # Create audio bed reference in audio element list
     audio_element_list.append(audio_bed_list[audio_bed_counter])
@@ -564,8 +569,8 @@ def parse_pmd_xml(xml_struct, mode):
         xml_iat_content_id_list = iat_root.findall(PMD_XML_ROOT_SE_PMD_SE_IAT_SE_CID)
         xml_iat_timestamp_list = iat_root.findall(PMD_XML_ROOT_SE_PMD_SE_IAT_SE_TST)
     else:
-    	xml_iat_content_id_list = []
-    	xml_iat_timestamp_list = []
+        xml_iat_content_id_list = []
+        xml_iat_timestamp_list = []
 
     return populate_model_from_xml(xml_audio_signal_list, xml_audio_bed_list, xml_audio_object_list,
                                    xml_audio_presentation_list, xml_iat_content_id_list, xml_iat_timestamp_list)
@@ -612,11 +617,17 @@ def populate_model_from_xml(xml_signals, xml_beds, xml_objects, xml_presentation
         output_target = output_targets.findall(PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG)
         left_channel = output_target[0]
         first_signal = left_channel.find(PMD_XML_ROOT_SE_PMD_SE_ASG)
+        first_audio_signal_id = first_signal.find(PMD_XML_ROOT_SE_PMD_SE_ASG_SE_ASG_AID)
 
-        # create_audio_bed(obj_name, loudspeaker_configuration, start_audio_signal, original_id=0):
+        if PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG_SE_ASG_SE_GAN in first_audio_signal_id.attrib:
+            gain_db = float(first_audio_signal_id.attrib[PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG_SE_ASG_SE_GAN][:-2])
+        else:
+            gain_db = 0.0
+
+            # create_audio_bed(obj_name, loudspeaker_configuration, start_audio_signal, original_id=0):
         create_audio_bed(get_element_text(xml_beds[i], PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_NME),
-                         speaker_config, int(first_signal.find(PMD_XML_ROOT_SE_PMD_SE_ASG_SE_ASG_AID).text),
-                         int(xml_beds[i].attrib[PMD_XML_ATTRIB_ID]))
+                         speaker_config, int(first_audio_signal_id.text),
+                         int(xml_beds[i].attrib[PMD_XML_ATTRIB_ID]), gain_db)
         i += 1
 
 
@@ -1048,8 +1059,6 @@ def populate_model_from_adm(xml_struct, mode):
 # ************************************************************************************************************************************************************ #
 # Create the PMD model of content
 # ************************************************************************************************************************************************************ #
-
-
 # start_logging()
 
 if __name__ == "__main__":
@@ -1096,12 +1105,13 @@ if __name__ == "__main__":
         print()      
        """
 
-        loop_counter = 10000
+        loop_counter = 1
         startsecs = time.time()
 
         for i in range(0, loop_counter):
             a = 0
             my_metadata = parse_pmd_xml("pmd_gen.xml", PMD_XML_MODE_FILE)
+            #my_metadata = parse_pmd_xml("gen.pmd1.xml", PMD_XML_MODE_FILE)
             #me = populate_model_from_adm('serial_adm.xml', PMD_XML_MODE_FILE)
             #me = parse_adm_xml('serial_adm.xml', PMD_XML_MODE_FILE)
 

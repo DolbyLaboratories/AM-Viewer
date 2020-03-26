@@ -160,10 +160,11 @@ class OutputTarget(object):
 
 
 class AudioBed(object):
-    def __init__(self, id, name, speaker_config):
+    def __init__(self, id, name, speaker_config, gain_db):
         self.id = id
         self.name = name
         self.speaker_config = speaker_config
+        self.gain_db = gain_db
         self.output_targets = []
 
     def update_name(self, name):
