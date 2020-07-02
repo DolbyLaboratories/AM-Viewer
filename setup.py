@@ -16,7 +16,7 @@ setuptools.setup(
      entry_points={'console_scripts':'am_viewer=am_viewer.am_viewer:main'},
      packages=setuptools.find_packages(),
      python_requires='>=3',
-     install_requires=['netifaces', 'zeroconf', 'scapy == 2.4.3'],
+     install_requires=['netifaces', 'zeroconf <= 0.26.3', 'scapy == 2.4.3'],
      include_package_data=True,
      package_data = {'adm': ['limits.txt'],
      				 'am_viewer': ['pmd_tool.Darwin','pmd_tool.Linux','pmd_tool.Windows.exe']
