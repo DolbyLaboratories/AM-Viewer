@@ -42,7 +42,7 @@ class sdp_parser:
                 header = split_line[0]
                 body = split_line[1].split(' ')
                 if header == 's' and len(body) > 0:
-                    self.session_name = body[0]
+                    self.session_name = ' '.join(body[:])
                 if header == 'm' and len(body) > 1:
                         self.type = body[0]
                         self.port = int(body[1])

@@ -37,6 +37,12 @@ import threading
 import aoip_services.sdp_parser
 from tkinter import *
 import errno
+from urllib.parse import quote
+import netifaces
+import sys
+
+sap_addr = "239.255.255.255"
+sap_port = 9875
 
 class StoppableThread(threading.Thread):
 
@@ -112,6 +118,8 @@ class aoip_service:
     codec = ""
     sdp_text = ""
     sdp = None
+    interface_list = []
+    dante_sock = None
 
 class aoip_discovery:
 
@@ -119,12 +127,19 @@ class aoip_discovery:
     service_list_lock = None
     callback = None
     dante_task = None
+    cseq = 0
 
 # call back is a function called when a service is added to the service list
 # this is call
-    def __init__(self, callback):
+    def __init__(self, callback, interface_list):
         self.callback = callback
-
+        # if bogus interface names are supplied, remove them
+        # if we end up with an empty list then the default interface will be used
+        self.interface_list = interface_list
+        known_ifaces = netifaces.interfaces()
+        for iface in interface_list:
+            if iface not in known_ifaces:
+                interface_list.remove(iface)
         # Startup ravenna discovery
         zeroconf = Zeroconf()
         browser = ServiceBrowser(zeroconf, "_ravenna_session._sub._rtsp._tcp.local.", handlers=[self.found_ravenna_service])
@@ -133,17 +148,14 @@ class aoip_discovery:
         self.dante_task = StoppableThread(target = self.dante_discovery_task)
         self.dante_task.start()
         self.service_list_lock = threading.Lock()
-
+        self.cseq = 0
 
     def stop(self):
         self.dante_task.stop()
 
     def dante_discovery_task(self):
 
-        sap_addr = "239.255.255.255"
-        port = 9875
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.dante_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         # Look up multicast group address in name server and find out IP version
         addrinfo = socket.getaddrinfo(sap_addr, None)[0]
@@ -151,34 +163,36 @@ class aoip_discovery:
         # Multicast code from: http://wiki.python.org/moin/UdpCommunication
 
         # Set some options to make it multicast-friendly
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.dante_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            self.dante_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         except AttributeError:
             pass # Some systems don't support SO_REUSEPORT
-        sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_TTL, 20)
-        sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_LOOP, 1)
+        #sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_TTL, 20)
+        #sock.setsockopt(socket.SOL_IP, socket.IP_MULTICAST_LOOP, 1)
 
-        if addrinfo[0] == socket.AF_INET:
+        if len(self.interface_list) == 0:
             membership_request = struct.pack("4sl", socket.inet_aton(sap_addr), socket.INADDR_ANY)
-            # See http://www.tldp.org/HOWTO/Multicast-HOWTO-6.html for explanation of sockopts
-            sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
+            self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
         else:
-            membership_request = struct.pack("16s16s", socket.inet_pton(socket.AF_INET6,sap_addr), chr(0)*16)
-            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_JOIN_GROUP, membership_request)
+            for iface in self.interface_list:
+                localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+                membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))
+        # See http://www.tldp.org/HOWTO/Multicast-HOWTO-6.html for explanation of sockopts
+                self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
 
         if platform.system() == 'Windows':
-            sock.bind( ('', port) ) # standard SAP port
+            self.dante_sock.bind( ('', sap_port) ) # standard SAP port
         else:
-            sock.bind( (sap_addr, port) ) # standard SAP port
+            self.dante_sock.bind( (sap_addr, sap_port) ) # standard SAP port
 
         group_bin = socket.inet_pton(addrinfo[0], addrinfo[4][0])
 
-        sock.setblocking(False)
+        self.dante_sock.setblocking(False)
 
         while not self.dante_task.stopped():
             try:
-                data, addr = sock.recvfrom(1024)
+                data, addr = self.dante_sock.recvfrom(1024)
             except socket.error as e:
                 err = e.args[0]
                 if err == errno.EAGAIN or err == errno.EWOULDBLOCK:
@@ -195,12 +209,28 @@ class aoip_discovery:
                 self.add_aoip_service_from_sdp_text("SAP", p.PayloadData.decode())
 
         # Leave SAP group
-        membership_request = struct.pack("4sl", socket.inet_aton(sap_addr), socket.INADDR_ANY)
-        sock.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, membership_request)
+        for iface in self.interface_list:
+            self.remove_interface(iface)
 
-        sock.close()
+        self.dante_sock.close()
 
+    def add_interface(self, iface):
+        self.interface_list.append(iface)
+        localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+        membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))
+        # See http://www.tldp.org/HOWTO/Multicast-HOWTO-6.html for explanation of sockopts
+        self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
 
+    def remove_interface(self, iface):
+        self.interface_list.remove(iface)
+        localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+        membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))
+        self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, membership_request)
+
+    def remove_all_interfaces(self):
+        for iface in self.interface_list:
+            self.remove_interface(iface)
+        self.interface_list = []
 
 # Create a service based on an SDP text string
 # This enables external discovery via shared SDP files
@@ -236,11 +266,13 @@ class aoip_discovery:
 
         if state_change is ServiceStateChange.Added:
             info = zeroconf.get_service_info(service_type, name)
-            if (service_type == '_ravenna_session._sub._rtsp._tcp.local.'):
+            if (service_type == '_ravenna_session._sub._rtsp._tcp.local.' and info is not None):
                 name = name.split('.',1)[0]
                 address = socket.inet_ntoa(cast(bytes, info.address))
                 port = cast(int, info.port)
-                req = 'DESCRIBE rtsp://' + address + ':' + str(port) + '/by-name/' + name + ' RTSP/1.0\r\n\r\n'
+                req = 'DESCRIBE rtsp://' + address + ':' + str(port) + '/by-name/' + quote(name) + ' RTSP/1.0\r\n' + \
+                'CSeq: ' + str(self.cseq) + '\r\n\r\n'
+                self.cseq = (self.cseq + 1) % 65536
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 try:
                     s.connect((address, port))
@@ -283,7 +315,8 @@ if __name__ == '__main__':
             #service.sdp.print()
             console_print("----------------------------------------")
 
-        new_aoip_discovery = aoip_discovery(new_service_callback)
+        # interface list passed as arguments
+        new_aoip_discovery = aoip_discovery(new_service_callback, sys.argv[1:])
 
         root.mainloop()
         new_aoip_discovery.stop()
