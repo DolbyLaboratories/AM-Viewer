@@ -44,6 +44,7 @@ import queue
 import copy
 import wave
 import errno
+import math
 from pmd.pmd_tool import parse_pmd_xml
 from pmd.pmd_tool import populate_model_from_xml
 from pmd.pmd_tool import populate_model_from_adm
@@ -69,7 +70,7 @@ from am_viewer.am_xml_viewer import isFileSADM
 import aoip_services.aoip_discovery
 import aoip_services.multicast
 
-__version__ = "3.2"
+__version__ = "3.5"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -664,7 +665,9 @@ class pmdDeframer:
                     # 8 bits, scale up to 24 bits because we are not using packed 20 bits yet
                     Pd = get_word(self.payloads, 9, False)
                     self.length20 = int(Pd / 8)
-                    self.length24 = int(Pd / 20) * 3
+                    # Ceil is used here so that if Pd is not divisible by 20 i.e. not whole number
+                    # of 20 bit words then we get the extra partial word
+                    self.length24 = int(math.ceil(Pd / 20.0)) * 3
                     # If subframe mode then we need twice as many samples to hold frame
                     if self.data_type == 27:
                         self.next_frame.format = "PMD"
@@ -697,8 +700,8 @@ class pmdDeframer:
                         temp_next_frame = self.next_frame
                         self.reset()
                         self.next_frame = temp_next_frame
-                        # Set state according to location of
-                        if self.next_frame.right_not_left:
+                        # Set state according frame mode and location of Pa
+                        if self.next_frame.subframe_mode and self.next_frame.right_not_left:
                             self.state = self.state + State.GOT_RIGHT_BLANKING
                         else:
                             self.state = self.state + State.GOT_LEFT_BLANKING
@@ -760,6 +763,7 @@ class PmdAdmDisplayGUI:
     audioPipeLine = None
     mixMatrix = None
     haveGstreamer = False
+    lastModelUpdateTime = 0
 
     class Indicators:
         pmd = "gray"
@@ -1001,7 +1005,7 @@ class PmdAdmDisplayGUI:
                         ifList.append(name)
             else:
                 for iface in fullIfListNames:
-                    if netifaces.ifaddresses(iface).get(netifaces.AF_INET) != None and iface != 'lo0':
+                    if netifaces.ifaddresses(iface).get(netifaces.AF_INET) != None and iface != 'lo0' and iface != 'lo':
                         ifList.append(iface)
 
             # Now we have a list of interfaces, create Drop-down menu to select interface
@@ -1033,7 +1037,7 @@ class PmdAdmDisplayGUI:
         # Make sure a main thread exists so it is able to accept messages, even if it is not started
 
         self.messageQueue = queue.Queue()
-        self.discoveryService = aoip_services.aoip_discovery.aoip_discovery(self.discoveryCallback)
+        self.discoveryService = aoip_services.aoip_discovery.aoip_discovery(self.discoveryCallback, [self.interface.get()])
         # If an SDP file was provided then add an additional service based on the file
         if sdp_filename is not None:
             self.discoveryService.add_aoip_service_from_sdp_file(sdp_filename)
@@ -1072,6 +1076,9 @@ class PmdAdmDisplayGUI:
 
     def setInterfaceName(self, selected):
         self.interfaceName = self.interface.get()
+        self.discoveryService.remove_all_interfaces()
+        self.discoveryService.add_interface(self.interface.get())
+
 
     # This call provides a service that can be used to update the elements in the display
     # A task is created that sniffs packets and updates the parameters
@@ -1497,12 +1504,19 @@ class PmdAdmDisplayGUI:
                 self.XMLViewerRequest = False
             if command == "updateModel":
                 self.updateFromModel(messageData)
+                self.lastModelUpdateTime = time.time()
             if command == "updateInd":
                 self.pmdInd.config(bg=self.indicators.pmd)
                 self.sadmInd.config(bg=self.indicators.sadm)
                 self.aesx242Ind.config(bg=self.indicators.aesx242)
                 self.FrameInd.config(bg=self.indicators.frame)
                 self.SubFrameInd.config(bg=self.indicators.subframe)
+        # Check to see if model has timed out, Using 2 second timeout for UI
+        if (self.lastModelUpdateTime > 0) and (time.time() > (self.lastModelUpdateTime + 2.0)):
+            self.reset_ui()
+            self.lastModelUpdateTime = 0
+            
+           
         return True
 
     def mainStart(self):
