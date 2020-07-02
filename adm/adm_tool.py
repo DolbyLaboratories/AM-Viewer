@@ -177,6 +177,7 @@ audio_channel_format_list = []
 audio_pack_format_list = []
 audio_block_format_list = []
 audio_track_uid_list = []
+transport_track_format_list = []
 
 # ************************************************************************************************************************************************************ #
 # ************************************************************************************************************************************************************ #
@@ -238,7 +239,7 @@ def get_audio_content_reference(object_name):
 
 def parse_adm_xml(xml_struct, mode):
     global audio_programme_list, audio_content_list, audio_object_list, audio_channel_format_list
-    global audio_pack_format_list, audio_block_format, audio_track_uid_list
+    global audio_pack_format_list, audio_block_format, audio_track_uid_list, transport_track_format_list
 
     # Clear out model lists
     del audio_programme_list[:]
@@ -248,6 +249,7 @@ def parse_adm_xml(xml_struct, mode):
     del audio_pack_format_list[:]
     del audio_block_format_list[:]
     del audio_track_uid_list[:]
+    del transport_track_format_list[:]
 
     tree = None
 
@@ -258,6 +260,8 @@ def parse_adm_xml(xml_struct, mode):
     xml_audio_pack_format_list = []
     xml_audio_block_format_list = []
     xml_audio_track_uid_list = []
+    xml_transport_track_format_list = []
+
 
     # Is source a blob of XML or an XML file ?
     if mode == ADM_XML_MODE_FILE:
@@ -269,11 +273,22 @@ def parse_adm_xml(xml_struct, mode):
     tree.getroot()
     root = tree.getroot()
 
-    # Find root of metadata
+    # Find root of metadata, there are two variants with S-ADM, one with and one without coreMetadata in the structure
     sadm_format_root = root.find('coreMetadata')
+    if sadm_format_root is not None:
+        adm_format_root = sadm_format_root.find('format')
+        adm_format_extended_root = adm_format_root.find('audioFormatExtended')
+    else:
+        # adm_format_extended_root = adm_format_root.find('audioFormatExtended')
+        adm_format_extended_root = root.find('audioFormatExtended')
 
-    adm_format_root = sadm_format_root.find('format')
-    adm_format_extended_root = adm_format_root.find('audioFormatExtended')
+    sadm_frame_header_root = root.find('frameHeader')
+    if sadm_frame_header_root is not None:
+        sadm_transport_track_format = sadm_frame_header_root.find('transportTrackFormat')
+        if sadm_transport_track_format is not None:
+            xml_transport_track_format_list = sadm_transport_track_format.findall('audioTrack')
+
+
 
     if adm_format_extended_root is not None:
         xml_audio_programme_list = adm_format_extended_root.findall(ADM_XML_APR_ELN)
@@ -661,6 +676,13 @@ def parse_adm_xml(xml_struct, mode):
             if mdl_audio_pack_fmt[j].id == audio_track_uid_list[i].pack_format_id:
                 mdl_audio_track_uid[i].pack_format_id = mdl_audio_pack_fmt[j]
 
+        for j in range(0, len(xml_transport_track_format_list)):
+            q = xml_transport_track_format_list[j].find('audioTrackUIDRef')
+            if q.text == audio_track_uid_list[i].id:
+                mdl_audio_track_uid[i].track_id = xml_transport_track_format_list[j].attrib['trackID']
+            print()
+
+
     # Update audio object with gain, audio_pack_idref, audio_track_uidref
     for i in range(0, len(mdl_audio_object)):
         # gain
@@ -801,12 +823,13 @@ if __name__ == "__main__":
 
         # tracemalloc.start()
  
-        loop_counter = 10000
+        loop_counter = 1
         startsecs = time.time()
         
         for i in range(0, loop_counter):
-            my_metadata = parse_adm_xml("serial_adm.xml", ADM_XML_MODE_FILE)
-            
+            my_metadata = parse_adm_xml("skip_sadm.xml", ADM_XML_MODE_FILE)
+            #my_metadata = parse_adm_xml("gen.adm_+_gen.sadm.xml", ADM_XML_MODE_FILE)
+
         endsecs = time.time()
         call_time = (endsecs - startsecs) / loop_counter
         print('Runtime = ' + str(endsecs - startsecs))

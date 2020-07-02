@@ -251,6 +251,7 @@ class AudioTrackUID:
         self.id = id
         self.channel_format_id = None
         self.pack_format_id = None
+        self.track_id = None
 
 
 """
