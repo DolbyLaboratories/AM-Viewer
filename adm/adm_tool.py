@@ -680,8 +680,6 @@ def parse_adm_xml(xml_struct, mode):
             q = xml_transport_track_format_list[j].find('audioTrackUIDRef')
             if q.text == audio_track_uid_list[i].id:
                 mdl_audio_track_uid[i].track_id = xml_transport_track_format_list[j].attrib['trackID']
-            print()
-
 
     # Update audio object with gain, audio_pack_idref, audio_track_uidref
     for i in range(0, len(mdl_audio_object)):
