@@ -972,7 +972,7 @@ def populate_model_from_adm(xml_struct, mode):
             # Create the bed
             # create_audio_bed(obj_name, loudspeaker_configuration, start_audio_signal, original_id=0)
             create_audio_bed(my_adm_metadata.audio_object[i].name, config,
-                             int(my_adm_metadata.audio_object[i].audio_track_idref[0].id[10:], 16), int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000)
+                             int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10), int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000)
 
         if int(my_adm_metadata.audio_object[i].audio_pack_idref[0].type_label) == ADM_XML_INT_TYP_OB:
             # In ADM, you can only get specifics about the nature of the essence (dialog, music, spoken subtitle etc) at the content level
@@ -1019,7 +1019,7 @@ def populate_model_from_adm(xml_struct, mode):
                                                 0].audio_block.position_coord.y_or_el),
                                       float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[
                                                 0].audio_block.position_coord.z_or_ds),
-                                      0.0, False, False, int(my_adm_metadata.audio_object[i].audio_track_idref[0].id[10:], 16),
+                                      0.0, False, False, int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10),
                                       float(my_adm_metadata.audio_content[j].audio_object_idref[k].gain),
                                       int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000)
 
@@ -1110,9 +1110,9 @@ if __name__ == "__main__":
 
         for i in range(0, loop_counter):
             a = 0
-            my_metadata = parse_pmd_xml("pmd_gen.xml", PMD_XML_MODE_FILE)
+            #my_metadata = parse_pmd_xml("pmd_gen.xml", PMD_XML_MODE_FILE)
             #my_metadata = parse_pmd_xml("gen.pmd1.xml", PMD_XML_MODE_FILE)
-            #me = populate_model_from_adm('serial_adm.xml', PMD_XML_MODE_FILE)
+            me = populate_model_from_adm('skip_sadm.xml', PMD_XML_MODE_FILE)
             #me = parse_adm_xml('serial_adm.xml', PMD_XML_MODE_FILE)
 
         endsecs = time.time()
