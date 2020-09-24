@@ -34,6 +34,7 @@ import platform
 import os
 import signal
 import sys
+import traceback
 import subprocess
 import binascii
 import zlib
@@ -70,7 +71,7 @@ from am_viewer.am_xml_viewer import isFileSADM
 import aoip_services.aoip_discovery
 import aoip_services.multicast
 
-__version__ = "3.5"
+__version__ = "3.9"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -97,7 +98,6 @@ class AudioBedHeadings:
     START = 4
     END = 5
 
-
 # Helper functions
 
 def get_cmd_stdio(args):
@@ -113,12 +113,8 @@ def get_cmd_stdio(args):
 def gain_from_db(db):
     return 10 ** (db / 20)
 
-def get_word(payload, index, subframe_mode):
-    if subframe_mode:
-        return(int.from_bytes(payload[index*2:(index*2)+3], byteorder='big') >> 4)
-    else:
-        return(int.from_bytes(payload[index:index+3], byteorder='big') >> 4)
-
+def get_word(payload, index, bit_depth):
+    return(int.from_bytes(payload[index:index+3], byteorder='big') >> (24 - bit_depth))
 
 def endian_swap24(array24):
     swapped24 = bytearray(b'')
@@ -356,7 +352,7 @@ def get_pmd_xml_from_wav(frame):
     return True
 
 
-def get_pmd_xml_from_klv(frame, pack20_flag):
+def get_pmd_xml_from_klv(frame):
     pmd_tool_exec = os.path.dirname(__file__) + "/pmd_tool." + platform.system()
     if platform.system() == 'Windows':
         pmd_tool_exec = pmd_tool_exec + '.exe'
@@ -365,10 +361,7 @@ def get_pmd_xml_from_klv(frame, pack20_flag):
         print("Platform", platform.system(), "not supported", file=sys.stderr)
         exit(-4)
 
-    if pack20_flag:
-        klv_payload = pack_20bits(frame.payload)
-    else:
-        klv_payload = frame.payloads[0]
+    klv_payload = frame.payloads[0]
     with open("pmd.klv", "wb") as klv_file:
         klv_file.write(klv_payload)
     try:
@@ -386,7 +379,7 @@ def get_pmd_xml_from_klv(frame, pack20_flag):
 def get_sadm_xml(frame):
     index = 0
     if frame.sADM_assemble_flag == 1:
-        assemble_info = get_word(frame.payloads[0], index, False)
+        assemble_info = get_word(frame.payloads[0], index, frame.bit_depth)
         in_timeline_flag = (assemble_info >> 4) & 0x3
         # Only support full frame mode so this must be 0
         if (in_timeline_flag != 0):
@@ -396,13 +389,16 @@ def get_sadm_xml(frame):
         #track_ID = (assemble_info >> 12) & 0x3f
         index = index + 3
     if frame.sADM_format_flag == 1:
-        format_info = get_word(frame.payloads[0], index, False)
-        format_type = format_info >> 4 & 0xf
+        format_info = get_word(frame.payloads[0], index, frame.bit_depth)
+        format_type = format_info >> (frame.bit_depth - 16) & 0xf
         index = index + 3
     else:
         format_type = 0
     if format_type == 1:
-        gzip_data = pack_20bits(frame.payloads[0][index:])
+        if frame.bit_depth == 20:
+            gzip_data = pack_20bits(frame.payloads[0][index:])
+        else:
+            gzip_data = frame.payloads[0][index:]
         try:
             adm_xml = zlib.decompress(gzip_data, 15 + 32)
         except:
@@ -426,10 +422,10 @@ class pmdDeframer:
  
     subframe_mode = None
     got_header = False
-    length20=0
-    length24=0
-    data_type=0
-
+    length_bytes = 0
+    length24 = 0
+    data_type = 0
+    bit_depth = 0
     payloads = b''
     left_zero_count = 0
     right_zero_count = 0
@@ -440,14 +436,13 @@ class pmdDeframer:
     new_frames = []
     active_channel = False
 
-    pa = 0x6f872
-    pb = 0x54e1f
     zero_threshold = 350
     intraframe_zero_threshold = 160
 
     class NewFrame:
-        payload = None
+        payloads = []
         format = None
+        bit_depth = None
         subframe_mode = None
         right_not_left = None
         sADM_assemble_flag = None
@@ -456,6 +451,7 @@ class pmdDeframer:
         def __init__(self):
             self.payloads = []
             self.format = None
+            self.bit_depth = None
             self.subframe_mode = None
             self.right_not_left = None
             self.sADM_assemble_flag = None
@@ -489,10 +485,10 @@ class pmdDeframer:
     def __init__(self):
         self.subframe_mode = None
         self.got_header = False
-        self.length20=0
+        self.length_bytes=0
         self.length24=0
         self.data_type=0
-
+        self.bit_depth=0
         self.payloads = b''
         self.left_zero_count = 0
         self.right_zero_count = 0
@@ -504,17 +500,13 @@ class pmdDeframer:
         self.next_frame = None
         self.active_channel = False
 
-        self.pa = 0x6f872
-        self.pb = 0x54e1f
         self.zero_threshold = 350
         self.intraframe_zero_threshold = 160
-
-
 
     def reset(self):
         self.subframe_mode = None
         self.got_header = False
-        self.length20 = 0
+        self.length_bytes = 0
         self.length24 = 0
         self.data_type = 0
         self.payloads = b''
@@ -526,6 +518,32 @@ class pmdDeframer:
         self.last_sequnce_no = None
         self.active_channel = False
         self.next_frame = None
+
+    def isPa(self, sample):
+        pa20 = 0x6f8720
+        pa24 = 0x96f872
+        if sample == pa20:
+            self.bit_depth = 20
+            return True
+        elif sample == pa24:
+            self.bit_depth = 24
+            return True
+        else:
+            self.bit_depth = 0
+            return False
+
+    def isPb(self, sample):
+        pb20 = 0x54e1f0
+        pb24 = 0xa54e1f
+        if sample == pb20:
+            self.bit_depth = 20
+            return True
+        elif sample == pb24:
+            self.bit_depth = 24
+            return True
+        else:
+            self.bit_depth = 0
+            return False
 
     def receivePacket(self, packet, codec):
         if codec == "AM824":
@@ -542,6 +560,7 @@ class pmdDeframer:
             # See if we already have a payload, if so then we can process it
             if len(self.payloads) > 0:
                 next_frame = self.NewFrame()
+                next_frame.bit_depth = 24 # no unpacking required
                 next_frame.format = "AESX242"
                 next_frame.payloads = [self.payloads]
                 self.new_frames.append(next_frame)
@@ -562,6 +581,7 @@ class pmdDeframer:
             self.last_sequnce_no = packet["RTP"].sequence
         else:
             self.reset()
+        #my_hexdump(packet_payload)
         for index in range(0, len(packet_payload), 4):
             # If subframe mode is detected
             right_not_left = not right_not_left
@@ -574,7 +594,7 @@ class pmdDeframer:
 
             # Because we are aligned to the actual sync word we drop the fourth/last byte
             next_word = packet_payload[index + 1:index + 4]
-            next_sample = int.from_bytes(next_word, byteorder='big') >> 4
+            next_sample = int.from_bytes(next_word, byteorder='big')
 
             # Search for blanking period: 350 zeros
             if self.state & State.IDLE:
@@ -612,7 +632,7 @@ class pmdDeframer:
                 else:
                     # reset parser until we find zeros
                     if right_not_left:
-                        if next_sample == self.pa and (self.state & State.GOT_RIGHT_BLANKING):
+                        if self.isPa(next_sample) and (self.state & State.GOT_RIGHT_BLANKING):
                             self.state = State.GOT_PA
                             self.payloads = self.payloads + next_word
                         else:
@@ -620,7 +640,7 @@ class pmdDeframer:
                             self.frame_mode_zero_count = 0
                             self.state = self.state & ~(State.GOT_RIGHT_BLANKING + State.GOT_FRAME_MODE_BLANKING)
                     else:
-                        if next_sample == self.pa and (self.state & State.GOT_LEFT_BLANKING):
+                        if self.isPa(next_sample) and (self.state & State.GOT_LEFT_BLANKING):
                             self.state = State.GOT_PA
                             self.payloads = self.payloads + next_word
                         else:
@@ -633,11 +653,11 @@ class pmdDeframer:
                 self.payloads = self.payloads + next_word
                 frame_pos = len(self.payloads)
                 if frame_pos == 6:
-                    if next_sample == self.pb and right_not_left:
+                    if self.isPb(next_sample) and right_not_left:
                         self.subframe_mode = False
                         self.state = State.GOT_SYNC
                 elif frame_pos == 9:
-                    if next_sample == self.pb:
+                    if self.isPb(next_sample):
                         self.subframe_mode = True
                         self.state = State.GOT_SYNC
                         # remove middle word from payload
@@ -657,24 +677,25 @@ class pmdDeframer:
                 frame_pos = len(self.payloads)
 
                 if frame_pos == 15:
-                    Pc = get_word(self.payloads, 6, False)
-                    self.data_type = (Pc & 0x01f0) >> 4
+                    self.next_frame.bit_depth = self.bit_depth
+                    Pc = get_word(self.payloads, 6, self.next_frame.bit_depth)
+                    self.data_type = (Pc >> (self.next_frame.bit_depth - 16)) & 0x1f
                     # If extended data type then add in Pe
                     if self.data_type == 31:
-                        self.data_type = self.data_type + get_word(self.payloads, 12, False) & 0xffff
+                        self.data_type = self.data_type + get_word(self.payloads, 12, self.next_frame.bit_depth) & 0xffff
                     # 8 bits, scale up to 24 bits because we are not using packed 20 bits yet
-                    Pd = get_word(self.payloads, 9, False)
-                    self.length20 = int(Pd / 8)
-                    # Ceil is used here so that if Pd is not divisible by 20 i.e. not whole number
-                    # of 20 bit words then we get the extra partial word
-                    self.length24 = int(math.ceil(Pd / 20.0)) * 3
+                    Pd = get_word(self.payloads, 9, self.next_frame.bit_depth)
+                    self.length_bytes = int(Pd / 8)
+                    # Ceil is used here so that if Pd is not divisible by bit depth i.e. not whole number
+                    # of samples then we get the extra partial word
+                    self.length24 = int(math.ceil(Pd / float(self.bit_depth))) * 3
                     # If subframe mode then we need twice as many samples to hold frame
                     if self.data_type == 27:
                         self.next_frame.format = "PMD"
                     if self.data_type == 32:
                         self.next_frame.format = "SADM"
-                        self.next_frame.sADM_assemble_flag = (Pc >> 13) & 0x1
-                        self.next_frame.sADM_format_flag = (Pc >> 14) & 0x1
+                        self.next_frame.sADM_assemble_flag = (Pc >> (self.next_frame.bit_depth - 7)) & 0x1
+                        self.next_frame.sADM_format_flag = (Pc >> (self.next_frame.bit_depth - 6)) & 0x1
                     # adjust for Pe & Pf
                     #if self.data_type > 30:
                         # adjust for Pe and Pf
@@ -747,9 +768,6 @@ class PmdAdmDisplayGUI:
     audioNameList = []
     selectedService = None
     audioService = None
-    pmdIndVar = None
-    sadmIndVar = None
-    aesx242IndVar = None
     XMLViewerRequest = False
     discoveryService = None
     start_time = 0
@@ -764,6 +782,18 @@ class PmdAdmDisplayGUI:
     mixMatrix = None
     haveGstreamer = False
     lastModelUpdateTime = 0
+    exitCode = 0
+
+    class ErrorCodes:
+        ERR_OK = 0
+        ERR_FORMAT_NOT_RECOGNIZED = -1
+        ERR_BAD_PMD = -2
+        ERR_BAD_SADM = -3
+
+    errorMessages = ["No Error",
+                     "Format not recognized",
+                     "Recognized file as PMD but parsing failed",
+                     "Recognized file as ADM but parsing failed"]
 
     class Indicators:
         pmd = "gray"
@@ -771,9 +801,39 @@ class PmdAdmDisplayGUI:
         aesx242 = "gray"
         frame = "gray"
         subframe = "gray"
+        depth20 = "gray"
+        depth24 = "gray"
+        pmdInd = None
+        sadmInd = None
+        FrameInd = None
+        SubFrameInd = None
+        depth20Ind = None
+        depth24Ind = None
+        pmdIndVar = None
+        sadmIndVar = None
+        aesx242IndVar = None
         gui = None
+        indFrame = None
 
-        def __init__(self, gui):
+        def __init__(self, gui, indFrame):
+            self.indFrame = indFrame
+            self.pmdInd = Label(self.indFrame, text='PMD', variable=self.pmdIndVar, fg='black')
+            self.pmdInd.pack(side=LEFT)
+            self.sadmInd = Label(self.indFrame, text='sADM', variable=self.sadmIndVar, fg='black')
+            self.sadmInd.pack(side=LEFT)
+            self.aesx242Ind = Label(self.indFrame, text='AES-X242', variable=self.aesx242IndVar, fg='black')
+            self.aesx242Ind.pack(side=LEFT)
+
+            self.FrameInd = Label(self.indFrame, text='Frame', fg='black')
+            self.FrameInd.pack(side=LEFT)
+            self.SubFrameInd = Label(self.indFrame, text='Subframe', fg='black')
+            self.SubFrameInd.pack(side=LEFT)
+
+            self.depth20Ind = Label(self.indFrame, text='20 bit', fg='black')
+            self.depth20Ind.pack(side=LEFT)
+            self.depth24Ind = Label(self.indFrame, text='24 bit', fg='black')
+            self.depth24Ind.pack(side=LEFT)
+
             self.gui = gui
 
         def reset(self):
@@ -782,7 +842,18 @@ class PmdAdmDisplayGUI:
             self.aesx242 = "gray"
             self.frame = "gray"
             self.subframe = "gray"
+            self.depth20 = "gray"
+            self.depth24 = "gray"
             self.gui.post("updateInd", None)
+
+        def update(self):
+            self.pmdInd.config(bg=self.pmd)
+            self.sadmInd.config(bg=self.sadm)
+            self.aesx242Ind.config(bg=self.aesx242)
+            self.FrameInd.config(bg=self.frame)
+            self.SubFrameInd.config(bg=self.subframe)
+            self.depth20Ind.config(bg=self.depth20)
+            self.depth24Ind.config(bg=self.depth24)
 
         def rxMetadata(self):
             return self.pmd =="light green" or self.sadm =="light green" or self.aesx242 =="light green"
@@ -846,8 +917,20 @@ class PmdAdmDisplayGUI:
                 self.frame = "gray"
                 self.gui.post("updateInd", None)
 
+        def depth20Mode(self):
+            if not self.depth20 == "light green":
+                self.depth20 = "light green"
+                self.depth24 = "gray"
+                self.gui.post("updateInd", None)
 
-    def __init__(self, master, xml_filename, sdp_filename, debug_mode):
+        def depth24Mode(self):
+            if not self.depth24 == "light green":
+                self.depth24 = "light green"
+                self.depth20 = "gray"
+                self.gui.post("updateInd", None)
+
+
+    def __init__(self, master, xml_file, sdp_file, debug_mode):
 
         master.title("Audio Metadata Viewer v" + __version__)
         self.debug = debug_mode
@@ -855,19 +938,7 @@ class PmdAdmDisplayGUI:
         self.indFrame = Frame(master, relief=self.frameRelief, borderwidth=self.frameBorderwidth)
         self.indFrame.pack(fill=BOTH, expand=True)
 
-        self.pmdInd = Label(self.indFrame, text='PMD', variable=self.pmdIndVar, fg='black')
-        self.pmdInd.pack(side=LEFT)
-        self.sadmInd = Label(self.indFrame, text='sADM', variable=self.sadmIndVar, fg='black')
-        self.sadmInd.pack(side=LEFT)
-        self.aesx242Ind = Label(self.indFrame, text='AES-X242', variable=self.aesx242IndVar, fg='black')
-        self.aesx242Ind.pack(side=LEFT)
-
-        self.FrameInd = Label(self.indFrame, text='Frame', fg='black')
-        self.FrameInd.pack(side=LEFT)
-        self.SubFrameInd = Label(self.indFrame, text='Subframe', fg='black')
-        self.SubFrameInd.pack(side=LEFT)
-
-        self.indicators = self.Indicators(self)
+        self.indicators = self.Indicators(self, self.indFrame)
 
         audio_beds_label = Label(master, text="Audio Beds")
         audio_beds_label.pack(fill=X)
@@ -970,20 +1041,30 @@ class PmdAdmDisplayGUI:
             button.pack(side=LEFT)
 
         # If a filename was specified then load it into UI, otherwise just wait for run to pressed to search for service
-        if xml_filename is not None:
-            if isFilePmd(xml_filename):
+        if xml_file is not None:
+            if isFilePmd(xml_file):
                 try:
-                    self.model = parse_pmd_xml(xml_filename, PMD_XML_MODE_FILE)
-                    xml_filename.seek(0)
+                    self.model = parse_pmd_xml(xml_file, PMD_XML_MODE_FILE)
+                    xml_file.seek(0)
                 except:
-                    raise RuntimeError("Recognized file as PMD but parsing failed")
-            elif isFileSADM(xml_filename):
+                    if self.debug:
+                        traceback.print_exc(file=sys.stdout)
+                    self.exitCode = self.ErrorCodes.ERR_BAD_PMD
+                    self.quit()
+                    return
+            elif isFileSADM(xml_file):
                 try:
-                    self.model = populate_model_from_adm(xml_filename, ADM_XML_MODE_FILE)
+                    self.model = populate_model_from_adm(xml_file, ADM_XML_MODE_FILE)
                 except:
-                    raise RuntimeError("Recognized file as ADM but parsing failed")
+                    if self.debug:
+                        traceback.print_exc(file=sys.stdout)
+                    self.exitCode = self.ErrorCodes.ERR_BAD_SADM
+                    self.quit()
+                    return
             else:
-                raise("File format not recognized")
+                    self.exitCode = self.ErrorCodes.ERR_FORMAT_NOT_RECOGNIZED
+                    self.quit()
+                    return               
             self.updateFromModel(self.model)
         else:
             # Create Drop down for IP Interfaces
@@ -1037,12 +1118,14 @@ class PmdAdmDisplayGUI:
         # Make sure a main thread exists so it is able to accept messages, even if it is not started
 
         self.messageQueue = queue.Queue()
-        self.discoveryService = aoip_services.aoip_discovery.aoip_discovery(self.discoveryCallback, [self.interface.get()])
-        # If an SDP file was provided then add an additional service based on the file
-        if sdp_filename is not None:
-            self.discoveryService.add_aoip_service_from_sdp_file(sdp_filename)
-        # This object is needed for joins and leaves
-        self.multicast = aoip_services.multicast.MulticastGroup()
+        # If we have an interface then start up discovery service and network services
+        if self.interface is not None:
+            self.discoveryService = aoip_services.aoip_discovery.aoip_discovery(self.discoveryCallback, [self.interface.get()])
+            # If an SDP file was provided then add an additional service based on the file
+            if sdp_file is not None:
+                self.discoveryService.add_aoip_service_from_sdp_file(sdp_file)
+            # This object is needed for joins and leaves
+            self.multicast = aoip_services.multicast.MulticastGroup()
 
         try:
         	shellState = (platform.system() == "Windows")
@@ -1059,8 +1142,9 @@ class PmdAdmDisplayGUI:
         # If the packet processor is running faster than the UI background task
         # then UI updates are dropped
         # This avoids the UI lagging behind and a memory leak with an ever increasing queue of models
-        if self.messageQueue.qsize() < 5 or command != "updateModel":
-            self.messageQueue.put([command,data])
+        if self.messageQueue is not None:
+            if self.messageQueue.qsize() < 5 or command != "updateModel":
+                self.messageQueue.put([command,data])
 
     def messageWaiting(self):
         return not self.messageQueue.empty()
@@ -1077,7 +1161,11 @@ class PmdAdmDisplayGUI:
     def setInterfaceName(self, selected):
         self.interfaceName = self.interface.get()
         self.discoveryService.remove_all_interfaces()
-        self.discoveryService.add_interface(self.interface.get())
+        if platform.system() == "Windows":
+            socketIfName = [x['guid'] for x in scapy.get_windows_if_list() if x['name'] == self.interfaceName][0]
+        else:
+            socketIfName = self.interfaceName
+        self.discoveryService.add_interface(socketIfName)
 
 
     # This call provides a service that can be used to update the elements in the display
@@ -1323,8 +1411,10 @@ class PmdAdmDisplayGUI:
 
     def quit(self):
         # Stop discovery
-        self.multicast.leave()
-        self.discoveryService.stop()
+        if self.multicast is not None:
+            self.multicast.leave()
+        if self.discoveryService is not None:
+            self.discoveryService.stop()
         self.playbackPres = None
         if self.playing():
             self.stop_playback()
@@ -1334,12 +1424,12 @@ class PmdAdmDisplayGUI:
             self.mainThread.stop()
         else:
             self.post("quit", None)
+        if self.exitCode != self.ErrorCodes.ERR_OK:
+            sys.stderr.write("Error: " + self.errorMessages[-self.exitCode] + "\n")
 
     # Based on the selected service, set it as active
     def run(self):
         if len(self.serviceNameList) > 0:
-            #service = self.serviceSelection.get()
-            #name = self.serviceNameList.index(service)
             self.set_service(self.serviceList[self.serviceNameList.index(self.serviceSelection.get())])
 
     def memoryDebug(self):
@@ -1506,11 +1596,7 @@ class PmdAdmDisplayGUI:
                 self.updateFromModel(messageData)
                 self.lastModelUpdateTime = time.time()
             if command == "updateInd":
-                self.pmdInd.config(bg=self.indicators.pmd)
-                self.sadmInd.config(bg=self.indicators.sadm)
-                self.aesx242Ind.config(bg=self.indicators.aesx242)
-                self.FrameInd.config(bg=self.indicators.frame)
-                self.SubFrameInd.config(bg=self.indicators.subframe)
+                self.indicators.update()
         # Check to see if model has timed out, Using 2 second timeout for UI
         if (self.lastModelUpdateTime > 0) and (time.time() > (self.lastModelUpdateTime + 2.0)):
             self.reset_ui()
@@ -1554,15 +1640,18 @@ class PmdAdmDisplayGUI:
                                             self.indicators.pmdOn()
                                     else:
                                         self.indicators.pmdError()
+                                        if self.debug:
+                                            traceback.print_exc(file=sys.stdout)
                                         raise RuntimeError("PMD conversion to XML failed!")
                                 elif newFrame.is_sADM():
                                     xmlText = get_sadm_xml(newFrame)
                                     if xmlText is not None:
                                         try:
-                                            #model = populate_model_from_adm("sadm.xml", ADM_XML_MODE_FILE)
                                             self.model = populate_model_from_adm(xmlText, ADM_XML_MODE_STRING)
                                         except:
                                             self.indicators.sadmError()
+                                            if self.debug:
+                                                traceback.print_exc(file=sys.stdout)
                                             raise RuntimeError("SADM XML parsing failed")
                                         self.post("updateModel", copy.deepcopy(self.model))
                                         self.indicators.sadmOn()
@@ -1570,7 +1659,7 @@ class PmdAdmDisplayGUI:
                                         self.indicators.sadmError()
                                         raise RuntimeError("SADM conversion to XML failed!")
                                 elif newFrame.is_AESX242():
-                                    if get_pmd_xml_from_klv(newFrame,False):
+                                    if get_pmd_xml_from_klv(newFrame):
                                         try:
                                             self.model = parse_pmd_xml("pmd.xml", PMD_XML_MODE_FILE)
                                         except:
@@ -1591,6 +1680,11 @@ class PmdAdmDisplayGUI:
                                         self.indicators.subFrameMode()
                                     else:
                                         self.indicators.frameMode()
+
+                                if newFrame.bit_depth == 20:
+                                    self.indicators.depth20Mode()
+                                elif newFrame.bit_depth == 24:
+                                    self.indicators.depth24Mode()
 
                                 if (self.XMLViewerRequest):
                                     if newFrame.is_pmd() or newFrame.is_AESX242():
@@ -1642,14 +1736,14 @@ def main():
     root['bg'] = '#B3B4D8'
     root.tk_setPalette(background='#A3A4C8', foreground='black',
                    activeBackground='#A3A4C8', activeForeground='black')
+
     my_gui = PmdAdmDisplayGUI(root, args.xml, args.sdp, args.debug)
 
-    root.update()
-
-    while my_gui.processNextMessage(root):
+    if my_gui.exitCode == my_gui.ErrorCodes.ERR_OK:
         root.update()
 
-#	root.mainloop()
+    while my_gui.exitCode == my_gui.ErrorCodes.ERR_OK and my_gui.processNextMessage(root):
+        root.update()
 
 if __name__ == '__main__':
     main()

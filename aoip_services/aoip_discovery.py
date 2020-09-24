@@ -215,6 +215,8 @@ class aoip_discovery:
         self.dante_sock.close()
 
     def add_interface(self, iface):
+        if platform.system() == 'Windows':
+            return
         self.interface_list.append(iface)
         localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
         membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))
@@ -222,6 +224,8 @@ class aoip_discovery:
         self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
 
     def remove_interface(self, iface):
+        if platform.system() == 'Windows':
+            return
         self.interface_list.remove(iface)
         localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
         membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))

@@ -120,6 +120,8 @@ from adm.adm_const import ADM_XML_TYP_DS, ADM_XML_TYP_OB,ADM_XML_INT_TYP_DS, ADM
 from adm.adm_const import ADM_XML_MODE_FILE
 from adm.adm_const import ADM_XML_MODE_STRING
 
+from adm.adm_const import ADM_XML_CM, ADM_XML_FT, ADM_XML_AF
+
 from adm.adm_const import ADM_XML_APR_ELN, ADM_XML_APR_ELN_AT_NM, ADM_XML_APR_ELN_AT_LN, ADM_XML_APR_ELN_AT_ID, ADM_XML_APR_ELN_SE_PL
 from adm.adm_const import ADM_XML_APR_ELN_SE_PL_AT_LN, ADM_XML_APR_ELN_SE_CR, ADM_XML_APR_ELN_SE_LM, ADM_XML_APR_ELN_SE_AO
 
@@ -141,6 +143,8 @@ from adm.adm_const import ADM_XML_ATU_ELN, ADM_XML_ATU_ELN_AT_ID, ADM_XML_ATU_EL
 from adm.adm_const import ADM_XML_APR_ELN_SE_DG_AT_ND, ADM_XML_APR_ELN_SE_DG_AT_DC, ADM_XML_APR_ELN_SE_DG_AT_MC
 
 from adm.adm_const import ADM_XML_INDENT, PMD_XML_MODE_FILE, PMD_XML_MODE_STRING
+
+from adm.adm_const import SADM_XML_TTF_ELN_SE_AT_SE_AR, SADM_XML_TTF_ELN_SE_AT_AT_TI, SADM_XML_FH, SADM_XML_TTF_ELN , SADM_XML_TTF_ELN_SE_AT
 
 # Classes ******************************************************************************************************************************************************
 from adm.adm_classes import AudioProgramme, AudioContent, AudioObject, AudioBlockFormat, AudioPackFormat, AudioProgrammeLabel
@@ -262,10 +266,9 @@ def parse_adm_xml(xml_struct, mode):
     xml_audio_track_uid_list = []
     xml_transport_track_format_list = []
 
-
     # Is source a blob of XML or an XML file ?
     if mode == ADM_XML_MODE_FILE:
-        logging.info('Parsing XML ADM file ' + xml_struct)
+        logging.info('Parsing XML ADM file ') # + xml_struct.name)
         tree = ET.ElementTree(file=xml_struct)
     elif mode == ADM_XML_MODE_STRING:
         logging.info('Parsing XML ADM blob ')
@@ -274,21 +277,19 @@ def parse_adm_xml(xml_struct, mode):
     root = tree.getroot()
 
     # Find root of metadata, there are two variants with S-ADM, one with and one without coreMetadata in the structure
-    sadm_format_root = root.find('coreMetadata')
+    sadm_format_root = root.find(ADM_XML_CM)
     if sadm_format_root is not None:
-        adm_format_root = sadm_format_root.find('format')
-        adm_format_extended_root = adm_format_root.find('audioFormatExtended')
+        adm_format_root = sadm_format_root.find(ADM_XML_FT)
+        adm_format_extended_root = adm_format_root.find(ADM_XML_AF)
     else:
-        # adm_format_extended_root = adm_format_root.find('audioFormatExtended')
-        adm_format_extended_root = root.find('audioFormatExtended')
+        adm_format_extended_root = root.find(ADM_XML_AF)
 
-    sadm_frame_header_root = root.find('frameHeader')
+    # Get virtual to physical track mapping info
+    sadm_frame_header_root = root.find(SADM_XML_FH)
     if sadm_frame_header_root is not None:
-        sadm_transport_track_format = sadm_frame_header_root.find('transportTrackFormat')
+        sadm_transport_track_format = sadm_frame_header_root.find(SADM_XML_TTF_ELN)
         if sadm_transport_track_format is not None:
-            xml_transport_track_format_list = sadm_transport_track_format.findall('audioTrack')
-
-
+            xml_transport_track_format_list = sadm_transport_track_format.findall(SADM_XML_TTF_ELN_SE_AT)
 
     if adm_format_extended_root is not None:
         xml_audio_programme_list = adm_format_extended_root.findall(ADM_XML_APR_ELN)
@@ -324,14 +325,10 @@ def parse_adm_xml(xml_struct, mode):
                 return False
 
             if k is not None:
-                # logging.info(audio_programme_list[i].id + ' contains ' + str(len(k)) + ' ' + ADM_XML_APR_ELN_SE_CR)
                 for j in range(0, len(k)):
                     audio_programme_list[i].audio_content_idref.append(k[j].text)
             else:
                 logging.debug(MSG_INVALID_STUB + ADM_XML_APR_ELN_SE_CR)
-
-                # logging.error(audio_programme_list[i].id + ' contains ' + str(len(k)) + ' ' + ADM_XML_APR_ELN_SE_CR)
-                # return False
 
             # TODO actually grab loudness metadata and populate
             k = xml_audio_programme_list[i].findall(ADM_XML_APR_ELN_SE_LM)
@@ -370,10 +367,8 @@ def parse_adm_xml(xml_struct, mode):
 
             if k is not None:
                 x = int(k[0].text)
-                # ADM_XML_APR_ELN_SE_DG_AT_ND, ADM_XML_APR_ELN_SE_DG_AT_DC, ADM_XML_APR_ELN_SE_DG_AT_MC
-                # y = int(k[0].attrib[ADM_XML_APR_ELN_SE_DG_AT_CK])
-
                 z = DIALOGUE_TEXT[x] + ' = '
+
                 if x == 0:
                     y = int(k[0].attrib[ADM_XML_APR_ELN_SE_DG_AT_ND])
                     z = z + NON_DIALOGUE_CONTENT_KIND[y]
@@ -388,8 +383,6 @@ def parse_adm_xml(xml_struct, mode):
                     audio_content_list[i].dialogue = Dialogue(k[0].text, k[0].attrib[ADM_XML_APR_ELN_SE_DG_AT_MC])
 
                 logging.info(ADM_XML_APR_ELN_SE_DG + ', ' + z)
-
-                # audio_content_list[i].dialogue = Dialogue(k[0].text, k[0].attrib[ADM_XML_APR_ELN_SE_DG_AT_CK])
             else:
                 logging.debug(MSG_INVALID_STUB + ADM_XML_APR_ELN_SE_DG)
 
@@ -654,13 +647,11 @@ def parse_adm_xml(xml_struct, mode):
     for i in range(0, len(audio_channel_format_list)):
         mdl_audio_channel_fmt.append(AudioChannelFormat(audio_channel_format_list[i].id, audio_channel_format_list[i].name))
         search = 'AB_' + mdl_audio_channel_fmt[i].id[3:] + '_00000001'
-        # z = find_list_reference_by_id(mdl_audio_block_fmt, search)
         mdl_audio_channel_fmt[i].audio_block = find_list_reference_by_id(mdl_audio_block_fmt, search)
 
     # Update audio pack with audio channel
     for i in range(0, len(mdl_audio_pack_fmt)):
         for j in range(0, len(audio_pack_format_list[i].audio_channel_idref)):
-            # z = find_list_reference_by_id(mdl_audio_channel_fmt, audio_pack_format_list[i].audio_channel_idref[j])
             mdl_audio_pack_fmt[i].audio_channel_idref.append(find_list_reference_by_id(mdl_audio_channel_fmt, audio_pack_format_list[i].audio_channel_idref[j]))
 
     # Start populating audio track
@@ -675,11 +666,15 @@ def parse_adm_xml(xml_struct, mode):
         for j in range(0, len(mdl_audio_pack_fmt)):
             if mdl_audio_pack_fmt[j].id == audio_track_uid_list[i].pack_format_id:
                 mdl_audio_track_uid[i].pack_format_id = mdl_audio_pack_fmt[j]
+                break
 
         for j in range(0, len(xml_transport_track_format_list)):
-            q = xml_transport_track_format_list[j].find('audioTrackUIDRef')
-            if q.text == audio_track_uid_list[i].id:
-                mdl_audio_track_uid[i].track_id = xml_transport_track_format_list[j].attrib['trackID']
+            q = xml_transport_track_format_list[j].findall(SADM_XML_TTF_ELN_SE_AT_SE_AR)
+            if q is not None:
+                for k in range(0, len(q)):
+                    if q[k].text == audio_track_uid_list[i].id:
+                        mdl_audio_track_uid[i].track_id = xml_transport_track_format_list[j].attrib[SADM_XML_TTF_ELN_SE_AT_AT_TI]
+                        break
 
     # Update audio object with gain, audio_pack_idref, audio_track_uidref
     for i in range(0, len(mdl_audio_object)):
@@ -730,13 +725,6 @@ def parse_adm_xml(xml_struct, mode):
 
     return a
 
-
-def populate_model_from_xml(audio_program_list, audio_content_list, audio_object_list, audio_pack_format_list,
-                            audio_channel_format_list, audio_block_format_list, audio_track_uid_list):
-    print()
-    return
-
-
 def get_item_limits(item_name, number_found):
 
     # TODO This is slow
@@ -771,37 +759,9 @@ def start_logging():
     logging.info('Started')
     return
 
-"""
-def convert_adm_xml_to_pmd_xml(xml_struct, mode):
-    # my_metadata = parse_adm_xml(xml_struct, mode)
-
-    # (xml_file, ext_audio_signal_list, ext_audio_bed_list, ext_audio_object_list, ext_audio_presentation_list, ext_iat_list):
-    # write_pmd_xml_from_external('converted_adm_.xml')
-    a = create_audio_bed("7.1.4 M&E", LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4, 1)
-
-
-DIALOGUE = 0
-VDS = 1
-VOICEOVER = 2
-GENERIC = 3
-SPOKEN_SUBTITLE = 4
-EMERGENCY_ALERT = 5
-EMERGENCY_INFORMATION = 6
-
-
-    b = create_object("English Dialogue", DIALOGUE, False, -1.0, 1.0, 0.0, 0.0, False, False, 20, 0.0)
-    c = create_object("French Dialogue", VDS, False, -1.0, 1.0, 0.0, 0.0, False, False, 21, 0.0)
-    d = create_object("German Dialogue", SPOKEN_SUBTITLE, False, -1.0, 1.0, 0.0, 0.0, False, False, 22, 0.0)
-
-    # from pmd_tool import create_audio_bed, create_object, add_audio_presentation_names_by_name, add_iat
-    add_iat(str(uuid.uuid4()), 12345678)
-    return
-"""
-
 # ************************************************************************************************************************************************************ #
 # Create the ADM model of content
 # ************************************************************************************************************************************************************ #
-
 
 # start_logging()
 
@@ -857,57 +817,6 @@ if __name__ == "__main__":
         """
 
 
-        # convert_adm_xml_to_pmd_xml("serial_adm.xml", ADM_XML_MODE_FILE)
-        #my_metadata = parse_adm_xml("serial_adm.xml", ADM_XML_MODE_FILE)
-        #print()
-"""
-# create_static_dialogue_object(name, dialogue_type, azimuth_or_x, elevation_or_y, distance_or_z, channel_number)
-create_static_dialogue_object("English Dialogue", DIALOGUE, -1.0, 1.0, 0.0, 12)
-create_static_dialogue_object("English AD", AUDIO_DESCRIPTION, -0.5, -0.3, 0.5, 13)
-create_static_dialogue_object("French Dialogue", DIALOGUE, 0.75, 0.65, 0.55, 14)
-create_static_dialogue_object("French AD", AUDIO_DESCRIPTION, -0.11, -0.22, -0.33, 15)
-
-# create_audio_bed(name, configuration, start_channel)
-create_audio_bed("7.1.4 M&E", LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4, 1)
-
-# create_audio_programme(name, language, [names list of objects to include in the programme])
-create_audio_programme("P1", "eng", ["7.1.4 M&E", "English Dialogue"])
-create_audio_programme("P2", "fra", ["7.1.4 M&E", "French Dialogue"])
-create_audio_programme("P3", "eng", ["7.1.4 M&E", "English AD"])
-create_audio_programme("P4", "fra", ["7.1.4 M&E", "French AD"])
-
-# add_audio_programme_labels(name, [list of vales and language code pairs]
-add_audio_programme_labels("P1", ["English Commentator", "eng", "Commentateur Anglais", "fra"])
-add_audio_programme_labels("P2", ["French Commentator", "eng", "Commentateur Francais", "fra"])
-add_audio_programme_labels("P3", ["English AD", "eng", "Audiodescription en Anglais", "fra"])
-add_audio_programme_labels("P4", ["French AD", "eng", "Audiodescription en Francais", "fra"])
-
-print("Done")
-
-        key_type = 'lineno'
-        limit = 10
-        snapshot = tracemalloc.take_snapshot()
-        snapshot = snapshot.filter_traces((tracemalloc.Filter(False, "<frozen importlib._bootstrap>"), tracemalloc.Filter(False, "<unknown>")))
-        top_stats = snapshot.statistics(key_type)
-        print("Top %s lines" % limit)
-        print('{: <10}'.format("index"), '{: <40}'.format("filename"), '{: <10}'.format("line no"), '{: <10}'.format("size kB"))
-        for index, stat in enumerate(top_stats[:limit], 1):
-            frame = stat.traceback[0]
-            filename = os.sep.join(frame.filename.split(os.sep)[-2:])
-            print('{: <10}'.format(index), '{: <40}'.format(filename), '{: <10}'.format(frame.lineno), '{:0.1f}'.format(stat.size / 1024), "kB")
-            line = linecache.getline(frame.filename, frame.lineno).strip()
-            if line:
-                print('    %s' % line)
-        other = top_stats[limit:]
-        if other:
-            size = sum(stat.size for stat in other)
-            print("%s other: %.1f KiB" % (len(other), size / 1024))
-        total = sum(stat.size for stat in top_stats)
-        print("Total allocated size: %.1f KiB" % (total / 1024))
-
-
-"""
-
 # ************************************************************************************************************************************************************ #
 
 # ************************************************************************************************************************************************************ #
@@ -932,338 +841,3 @@ Rules For Parsing ADM
 
 # ************************************************************************************************************************************************************ #
 
-
-"""
-def check_positional_coordinates_in_range(azimuth_or_x, elevation_or_y, distance_or_z, calling_function):
-    global coordinate_mode
-    if coordinate_mode == POLAR:
-        azimuth_or_x_range = MIN_MAX_AZIMUTH
-        elevation_or_y_range = MIN_MAX_ELEVATION
-        distance_or_z_range = MIN_MAX_DISTANCE
-    elif coordinate_mode == CARTESIAN:
-        azimuth_or_x_range = MIN_MAX_XPOS
-        elevation_or_y_range = MIN_MAX_YPOS
-        distance_or_z_range = MIN_MAX_ZPOS
-
-    if abs(azimuth_or_x) > azimuth_or_x_range:
-        logging.debug(str(type(azimuth_or_x)) + " value of " + str(azimuth_or_x) + ' is out of min/max range of ' + str(
-            azimuth_or_x_range) + ' in ' + str(calling_function))
-
-    if abs(elevation_or_y) > elevation_or_y_range:
-        logging.debug(str(type(elevation_or_y)) + " value of " + str(elevation_or_y) + ' is out of min/max range of ' + str(
-            elevation_or_y_range) + ' in ' + str(calling_function))
-
-    if abs(distance_or_z) > distance_or_z_range:
-        logging.debug(str(type(distance_or_z)) + " value of " + str(distance_or_z) + ' is out of min/max range of ' + str(
-            distance_or_z_range) + ' in ' + str(calling_function))
-    return
-
-def create_audio_bed(obj_name, loudspeaker_configuration, start_audio_channel):
-
-    ************************************************************************************************************************************************************
-    ************************************************************************************************************************************************************
-
-        Incoming loudspeaker_configuration
-            logical and with LOUDSPEAKER_CONFIG_HORIZONTAL_CHANNEL_MASK (0xf) = number of horizontal channels
-            logical and with LOUDSPEAKER_CONFIG_VERTICAL_CHANNEL_MASK (0xf0) = number of vertical channels
-
-        Supported configurations already defined in BS.2051 (configurations use polar coordinates)
-            LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_A = Sound system A (Stereo)
-            LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_B = Sound system B (5.0)
-            LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_D = Sound system D (5.0.4)
-            LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_J = Sound system J (7.0.4)
-
-        Additional configurations that are in common use (configurations use cartesian coordinates)
-            LOUDSPEAKER_CONFIG_COMMON_USE_2_0 = 2.0
-            LOUDSPEAKER_CONFIG_COMMON_USE_5_0 = 5.0
-            LOUDSPEAKER_CONFIG_COMMON_USE_5_1 = 5.1
-            LOUDSPEAKER_CONFIG_COMMON_USE_5_1_4 = 5.0.4
-            LOUDSPEAKER_CONFIG_COMMON_USE_5_1_4 = 5.1.4
-            LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4 = 7.0.4
-            LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4 = 7.1.4
-
-    ************************************************************************************************************************************************************
-    ************************************************************************************************************************************************************
-
-
-    global audio_object_counter
-    global audio_content_counter
-    global audio_pack_format_counter
-    global audio_channel_format_counter
-    global audio_block_format_counter
-    global audio_track_uid_counter
-    global coordinate_mode
-
-    # Check incoming parameter data types
-    check_parameter_type(obj_name, str, create_audio_bed)
-    check_parameter_type(start_audio_channel, int, create_audio_bed)
-
-    # Range check parameters
-    check_parameter_value_range(start_audio_channel, MIN_AUDIO_CHANNEL, MAX_AUDIO_CHANNEL, create_audio_bed)
-
-    # Snapshot current counter values for later on
-    start_audio_track_uid_counter = audio_track_uid_counter
-    start_audio_channel_format_counter = audio_channel_format_counter
-    start_audio_block_format_counter = audio_block_format_counter
-
-    # Figure the number of channels present for each speaker plane
-    horizontal_channel_count = loudspeaker_configuration & LOUDSPEAKER_CONFIG_HORIZONTAL_CHANNEL_MASK
-    vertical_channel_count = (loudspeaker_configuration & LOUDSPEAKER_CONFIG_VERTICAL_CHANNEL_MASK) / 0x10
-
-    i = 0
-    while i < (horizontal_channel_count + vertical_channel_count):
-        audio_track_uid_list.append(AudioTrackUID(start_audio_channel + i))
-        audio_track_uid_counter += 1
-        i += 1
-
-    # Create audio bed object
-    audio_object_list.append(AudioObject(audio_object_counter + 1, obj_name))
-    audio_object_list[audio_object_counter].update_dialogue(NON_DIALOGUE_CONTENT)
-
-    # Add references to newly created AudioTrackUID
-    i = 0
-    while i < (audio_track_uid_counter - start_audio_track_uid_counter):
-        audio_object_list[audio_object_counter].audio_track_uid_refs.append(audio_track_uid_list[start_audio_track_uid_counter + i])
-        i += 1
-
-    # Create a content holder for audio bed
-    audio_content_list.append(AudioContent(audio_content_counter + 1, obj_name))
-    # Note, should add Music + Effects option to ADM, currently options are Undefined, Music, Effects
-    audio_content_list[audio_content_counter].update_non_dialogue(MUSIC)
-
-    # Add reference to AudioObject
-    audio_content_list[audio_content_counter].audio_object_id_refs.append(audio_object_list[audio_object_counter])
-
-    # Create the AudioPackFormat to point to AudioChannelFormats
-    audio_pack_format_list.append(AudioPackFormat(audio_pack_format_counter + 1, DIRECTSPEAKERS, obj_name))
-
-    # Add reference in AudioObject to newly created AudioPackFormat
-    audio_object_list[audio_object_counter].audio_pack_format_id_refs.append(audio_pack_format_list[audio_pack_format_counter])
-
-    # Create AudioChannelFormat entries, references in AudioPackFormat, and  AudioBlockFormat
-    i = 0
-    while i < (horizontal_channel_count + vertical_channel_count):
-        audio_channel_format_list.append(AudioChannelFormat(start_audio_channel_format_counter + i, DIRECTSPEAKERS, obj_name))
-        audio_pack_format_list[audio_pack_format_counter].audio_channel_format_id_refs.append(
-            audio_channel_format_list[start_audio_channel_format_counter + i])
-
-        # AudioChannelFormat reference in AudioTrackUID is because PCM does not need to have corresponding audioTrackFormat & audioStreamFormat elements
-        audio_track_uid_list[start_audio_track_uid_counter + i].audio_channel_format_id_ref.append(
-            audio_channel_format_list[start_audio_channel_format_counter + i])
-
-        # Create a single AudioBlockFormat entry as speaker channels are static, id has to align with the AudioChannelFormat its associated with
-        audio_block_format_list.append(AudioBlockFormat(start_audio_channel_format_counter + 1 + i, DIRECTSPEAKERS, coordinate_mode, 1))
-        audio_channel_format_counter += 1
-        audio_block_format_counter += 1
-        i += 1
-
-    # Update created AudioBlockFormat speaker labels for horizontal channels
-    i = 0
-    while i < horizontal_channel_count:
-        # BS.2015 definitions ?
-        if LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_RANGE_START <= loudspeaker_configuration <= LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_RANGE_END:
-            # Speaker labels and positions change based upon the number of horizontal channels in the configuration
-            if horizontal_channel_count > LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_ALT_SWITCH:
-                # Update speaker labels
-                audio_block_format_list[start_audio_block_format_counter + i].definition.update_speaker_label(
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_LABELS[i])
-                # Update speaker positions
-                audio_block_format_list[start_audio_block_format_counter + i].update_coordinates(
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_AZIMUTH[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_ELEVATION[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_DISTANCE[i])
-            else:
-                # Update speaker labels
-                audio_block_format_list[start_audio_block_format_counter + i].definition.update_speaker_label(
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_ALT_LABELS[i])
-                # Update speaker positions
-                audio_block_format_list[start_audio_block_format_counter + i].update_coordinates(
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_ALT_AZIMUTH[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_ELEVATION[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_DISTANCE[i])
-
-        # Common usage definitions ?
-        if LOUDSPEAKER_CONFIG_COMMON_USE_RANGE_START <= loudspeaker_configuration <= LOUDSPEAKER_CONFIG_COMMON_USE_RANGE_END:
-            # Note, unlike the BS.2051 definitions, the horizontal speaker labels for common format don't change based upon number of horizontal channels
-            skip_lfe = 0
-            # There is the option of not including the LFE channel, this can be detected by the horizontal_channel_count being an odd number
-            if horizontal_channel_count % 2 != 0:
-                # Reached the LFE index value yet ?, if so bump offset by one in the label and positional lists
-                if i >= LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_LFE_INDEX_VALUE:
-                    skip_lfe = 1
-
-            audio_block_format_list[start_audio_block_format_counter + i].definition.update_speaker_label(
-                LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_LABELS[i + skip_lfe])
-
-            # Update speaker positions
-            if horizontal_channel_count > LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_ALT_SWITCH:
-                audio_block_format_list[start_audio_block_format_counter + i].update_coordinates(
-                    LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_XPOS[i + skip_lfe],
-                    LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_YPOS[i + skip_lfe],
-                    LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_ZPOS[i + skip_lfe])
-            else:
-                audio_block_format_list[start_audio_block_format_counter + i].update_coordinates(
-                    LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_XPOS[i + skip_lfe],
-                    LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_ALT_YPOS[i + skip_lfe],
-                    LOUDSPEAKER_CONFIG_COMMON_USE_HORIZONTAL_SPEAKER_ZPOS[i + skip_lfe])
-        i += 1
-
-    # Update created AudioBlockFormat speaker labels for vertical channels
-    i = 0
-    while i < vertical_channel_count:
-        # BS.2015 definitions ?
-        if LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_RANGE_START <= loudspeaker_configuration <= LOUDSPEAKER_CONFIG_BS_2051_SOUND_SYSTEM_RANGE_END:
-            # Vertical speaker labels and positions change based upon the number of horizontal channels in the configuration
-            if horizontal_channel_count > LOUDSPEAKER_CONFIG_BS_2051_HORIZONTAL_SPEAKER_ALT_SWITCH:
-                # Update speaker labels
-                audio_block_format_list[start_audio_block_format_counter + horizontal_channel_count + i].definition.update_speaker_label(
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_LABELS[i])
-                # Update speaker positions
-                audio_block_format_list[start_audio_block_format_counter + horizontal_channel_count + i].update_coordinates(
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_AZIMUTH[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_ELEVATION[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_DISTANCE[i])
-            else:
-                # Update speaker labels
-                audio_block_format_list[start_audio_block_format_counter + horizontal_channel_count + i].definition.update_speaker_label(
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_ALT_LABELS[i])
-                # Update speaker positions
-                audio_block_format_list[start_audio_block_format_counter + horizontal_channel_count + i].update_coordinates(
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_ALT_AZIMUTH[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_ELEVATION[i],
-                    LOUDSPEAKER_CONFIG_BS_2051_VERTICAL_SPEAKER_DISTANCE[i])
-
-        # Common usage definition ?
-        if LOUDSPEAKER_CONFIG_COMMON_USE_RANGE_START <= loudspeaker_configuration <= LOUDSPEAKER_CONFIG_COMMON_USE_RANGE_END:
-            # Note, unlike the BS.2051 definitions the vertical speaker labels and positions don't change based upon number of horizontal channels
-            audio_block_format_list[start_audio_block_format_counter + horizontal_channel_count + i].definition.update_speaker_label(
-                LOUDSPEAKER_CONFIG_COMMON_USE_VERTICAL_SPEAKER_LABELS[i])
-            # Update speaker positions
-            audio_block_format_list[start_audio_block_format_counter + horizontal_channel_count + i].update_coordinates(
-                LOUDSPEAKER_CONFIG_COMMON_USE_VERTICAL_SPEAKER_XPOS[i],
-                LOUDSPEAKER_CONFIG_COMMON_USE_VERTICAL_SPEAKER_YPOS[i],
-                LOUDSPEAKER_CONFIG_COMMON_USE_VERTICAL_SPEAKER_ZPOS[i])
-        i += 1
-
-    # Add references in AudioChannelFormat to newly created AudioBlockFormat
-    i = 0
-    while i < (horizontal_channel_count + vertical_channel_count):
-        audio_channel_format_list[start_audio_channel_format_counter + i].audio_block_format_id_ref.append(
-            audio_block_format_list[start_audio_block_format_counter + i])
-        i += 1
-    audio_object_counter += 1
-    audio_content_counter += 1
-    audio_pack_format_counter += 1
-    return
-
-
-def create_static_dialogue_object(obj_name, dialog_type, azimuth_or_x, elevation_or_y, distance_or_z, audio_channel):
-    global audio_object_counter
-    global audio_content_counter
-    global audio_pack_format_counter
-    global audio_channel_format_counter
-    global audio_block_format_counter
-    global audio_track_uid_counter
-    global coordinate_mode
-
-    # Check incoming parameter data types
-    check_parameter_type(obj_name, str, create_static_dialogue_object)
-    check_parameter_type(dialog_type, int, create_static_dialogue_object)
-    check_parameter_type(azimuth_or_x, float, create_static_dialogue_object)
-    check_parameter_type(elevation_or_y, float, create_static_dialogue_object)
-    check_parameter_type(distance_or_z, float, create_static_dialogue_object)
-    check_parameter_type(audio_channel, int, create_static_dialogue_object)
-
-    # Range check parameters
-    check_parameter_value_range(dialog_type, DIALOGUE, EMERGENCY, create_static_dialogue_object)
-    check_positional_coordinates_in_range(azimuth_or_x, elevation_or_y, distance_or_z, create_static_dialogue_object)
-    check_parameter_value_range(audio_channel, MIN_AUDIO_CHANNEL, MAX_AUDIO_CHANNEL, create_static_dialogue_object)
-
-    # Add AudioTrackUID entry to audio_track_uid_list
-    audio_track_uid_list.append(AudioTrackUID(audio_channel))
-
-    # Create new dialogue audio object
-    audio_object_list.append(AudioObject(audio_object_counter + 1, obj_name))
-    audio_object_list[audio_object_counter].update_dialogue(DIALOGUE_CONTENT)
-
-    # Add reference to newly created AudioTrackUID
-    audio_object_list[audio_object_counter].audio_track_uid_refs.append(audio_track_uid_list[audio_track_uid_counter])
-
-    # Create a content holder for dialogue, you need one as the object itself doesn't signal the dialogue kind/sub-kind
-    audio_content_list.append(AudioContent(audio_content_counter + 1, obj_name))
-    audio_content_list[audio_content_counter].update_dialogue(dialog_type)
-
-    # Add reference to AudioObject
-    audio_content_list[audio_content_counter].audio_object_id_refs.append(audio_object_list[audio_object_counter])
-
-    # Create the AudioPackFormat to point to AudioChannelFormat
-    audio_pack_format_list.append(AudioPackFormat(audio_pack_format_counter + 1, OBJECTS, obj_name))
-
-    # Add reference in AudioObject to newly created AudioPackFormat
-    audio_object_list[audio_object_counter].audio_pack_format_id_refs.append(audio_pack_format_list[audio_pack_format_counter])
-
-    # Create AudioChannelFormat entry
-    audio_channel_format_list.append(AudioChannelFormat(audio_channel_format_counter + 1, OBJECTS, obj_name))
-
-    # Create AudioChannelFormat reference in AudioTrackUID. PCM does not need to have corresponding audioTrackFormat & audioStreamFormat elements
-    audio_track_uid_list[audio_track_uid_counter].audio_channel_format_id_ref.append(audio_channel_format_list[audio_channel_format_counter])
-
-    # Add reference in AudioPackFormat and AudioTrackUID to newly created AudioChannelFormat
-    audio_pack_format_list[audio_pack_format_counter].audio_channel_format_id_refs.append(audio_channel_format_list[audio_channel_format_counter])
-
-    # Create a single AudioBlockFormat entry as object is static, id has to align with the AudioChannelFormat its associated with
-    audio_block_format_list.append(AudioBlockFormat(audio_channel_format_counter + 1, OBJECTS, coordinate_mode, 1))
-
-    # Update created AudioBlockFormat positional coordinates
-    audio_block_format_list[audio_block_format_counter].update_coordinates(azimuth_or_x, elevation_or_y, distance_or_z)
-
-    # Add reference in AudioChannelFormat to newly created AudioBlockFormat
-    audio_channel_format_list[audio_channel_format_counter].audio_block_format_id_ref.append(audio_block_format_list[audio_block_format_counter])
-
-    audio_object_counter += 1
-    audio_content_counter += 1
-    audio_pack_format_counter += 1
-    audio_channel_format_counter += 1
-    audio_block_format_counter += 1
-    audio_track_uid_counter += 1
-    return
-
-
-def create_audio_programme(name, language, object_list):
-    global audio_programme_counter
-
-    # Check incoming parameter data types
-    check_parameter_type(name, str, create_audio_programme)
-    check_parameter_type(language, str, create_audio_programme)
-    check_parameter_type(object_list, list, create_audio_programme)
-
-    audio_programme_list.append(AudioProgramme(name, language, audio_programme_counter + 1))
-
-    i = 0
-    while i < object_list.__len__():
-        audio_content = get_audio_content_reference(object_list[i])
-        if audio_content is not None:
-            audio_programme_list[audio_programme_counter].content_id_refs.append(audio_content)
-        i += 1
-    audio_programme_counter += 1
-    return
-
-
-def add_audio_programme_labels(audio_program_name, value_language_code_list):
-    # Check incoming parameter data types
-    check_parameter_type(audio_program_name, str, add_audio_programme_labels)
-    check_parameter_type(value_language_code_list, list, add_audio_programme_labels)
-
-    # Range check parameters
-    if value_language_code_list.__len__() % 2 != 0:
-        logging.debug("Parameter list " + str(value_language_code_list) + " does not contain pairs of values, there are only " + str(
-            value_language_code_list.__len__()) + " total" + " in " + str(add_audio_programme_labels))
-
-    audio_programme = get_audio_program_reference(audio_program_name)
-    if audio_programme is not None:
-        i = 0
-        while i < value_language_code_list.__len__():
-            audio_programme.add_programme_label(value_language_code_list[i], value_language_code_list[i + 1])
-            i += 2
-    return
-"""

@@ -56,7 +56,7 @@ def isFileSADM(fileHandle):
     tree = ET.ElementTree(file=fileHandle)
     tree.getroot()
     root = tree.getroot()
-    sadm_format_root = root.find('coreMetadata')
+    sadm_format_root = root.find('audioFormatExtended')
     fileHandle.seek(0) # rewind file so that it can still be parsed
     if sadm_format_root == None:
         return(False)

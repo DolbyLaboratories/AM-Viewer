@@ -198,6 +198,10 @@ ADM_XML_TYP_OB = '_0003'
 ADM_XML_INT_TYP_DS = 1
 ADM_XML_INT_TYP_OB = 3
 
+ADM_XML_CM = 'coreMetadata'
+ADM_XML_FT = 'format'
+ADM_XML_AF = 'audioFormatExtended'
+
 ADM_XML_APR_ELN = 'audioProgramme'
 ADM_XML_APR_ELN_AT_NM = 'audioProgrammeName'
 ADM_XML_APR_ELN_AT_LN = 'audioProgrammeLanguage'
@@ -251,6 +255,12 @@ ADM_XML_ATU_ELN = 'audioTrackUID'
 ADM_XML_ATU_ELN_AT_ID = 'UID'
 ADM_XML_ATU_ELN_SE_CF = 'audioChannelFormatIDRef'
 ADM_XML_ATU_ELN_SE_PF = 'audioPackFormatIDRef'
+
+SADM_XML_FH = 'frameHeader'
+SADM_XML_TTF_ELN = 'transportTrackFormat'
+SADM_XML_TTF_ELN_SE_AT = 'audioTrack'
+SADM_XML_TTF_ELN_SE_AT_SE_AR = 'audioTrackUIDRef'
+SADM_XML_TTF_ELN_SE_AT_AT_TI = 'trackID'
 
 ADM_XML_INDENT = "  "
 PMD_XML_MODE_FILE = 0

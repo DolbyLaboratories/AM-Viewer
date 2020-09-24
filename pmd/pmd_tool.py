@@ -528,6 +528,23 @@ def xml_add_audio_element_list(xml_audio_presentation_ref, elements_list):
     return
 
 
+# parse_pmd_xml
+# main entry point for PMD parsing
+
+# mode (input)
+# Selects parsing mode which can either be XML string input or file input mode
+# To select string input mode use mode=PMD_XML_MODE_STRING
+# To select file input mode use mode=PMD_XML_MODE_FILE
+
+# xml_struct (input)
+# Provides XML either as a string or file
+# If mode=ADM_XML_MODE_STRING then the type of xml_struct must be string and directly defines the XML to be parsed
+# If mode=ADM_XML_MODE_FILE then xml_struct can either be the filename or the XML file to be parse or a file
+# object that can be used for parsing
+
+# Returns the parsed model
+
+
 def parse_pmd_xml(xml_struct, mode):
     xml_audio_element_list = []
 
@@ -930,6 +947,21 @@ def add_iat(content_uuid, time_stamp):
     iat_list.append(IaT(content_uuid, time_stamp))
     return
 
+# populate_model_from_adm
+# main entry point for ADM / sADM parsing
+
+# mode (input)
+# Selects parsing mode which can either be XML string input or file input mode
+# To select string input mode use mode=ADM_XML_MODE_STRING
+# To select file input mode use mode=ADM_XML_MODE_FILE
+
+# xml_struct (input)
+# Provides XML either as a string or file
+# If mode=ADM_XML_MODE_STRING then the type of xml_struct must be string and directly defines the XML to be parsed
+# If mode=ADM_XML_MODE_FILE then xml_struct can either be the filename or the XML file to be parse or a file
+# object that can be used for parsing
+
+# Returns the parsed model
 
 def populate_model_from_adm(xml_struct, mode):
     global audio_signal_list, audio_presentation_list, audio_bed_list, audio_object_list, audio_element_list, iat_list
@@ -970,9 +1002,9 @@ def populate_model_from_adm(xml_struct, mode):
                 config = LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4
 
             # Create the bed
-            # create_audio_bed(obj_name, loudspeaker_configuration, start_audio_signal, original_id=0)
             create_audio_bed(my_adm_metadata.audio_object[i].name, config,
-                             int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10), int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000)
+                             int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10), int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000,
+                             float(my_adm_metadata.audio_object[i].gain))
 
         if int(my_adm_metadata.audio_object[i].audio_pack_idref[0].type_label) == ADM_XML_INT_TYP_OB:
             # In ADM, you can only get specifics about the nature of the essence (dialog, music, spoken subtitle etc) at the content level
@@ -1062,86 +1094,61 @@ def populate_model_from_adm(xml_struct, mode):
 # start_logging()
 
 if __name__ == "__main__":
+
+    import sys
+    import argparse
+
+
+    parser = argparse.ArgumentParser(description='PMD/ADM Python Model Test')
+    parser.add_argument('-pmd', type=argparse.FileType('r'), default=None, help='PMD XML filename for input')
+    parser.add_argument('-sadm', type=argparse.FileType('r'), default=None, help='SADM XML filename for input')
+    parser.add_argument('-debug', action='store_const', const=True, help='Enables debug mode')
+    parser.add_argument('-loop', type=int, default=1, help='Loop Counter')
+    args = parser.parse_args()
+
     print ("main")
     # ******************************************************************************************************************************************************** #
     # Example section for API calls, i.e. model not driven by xml reader but UI or command line
     # ******************************************************************************************************************************************************** #
-    cmdline = True
-    if cmdline:
+    if args.sadm is not None:
         import os
         import linecache
         import time
-        #tracemalloc.start()
+        if args.debug:
+        	tracemalloc.start()
 
-        # me = populate_model_from_adm('serial_adm.xml', PMD_XML_MODE_FILE)
-
-        """
-        
-
-        create_audio_bed("7.1.4 ME", LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4, 1)
-        create_audio_bed("5.1 ME", LOUDSPEAKER_CONFIG_COMMON_USE_5_1, 13)
-        create_audio_bed("2.0 ME", LOUDSPEAKER_CONFIG_COMMON_USE_2_0, 19)
-
-        create_object("English Dialogue", DIALOGUE, False, -1.0, 1.0, 0.0, 0.0, False, False, 20, 0.0)
-        create_object("French Dialogue", VDS, False, -1.0, 1.0, 0.0, 0.0, False, False, 21, 0.0)
-        create_object("German Dialogue", SPOKEN_SUBTITLE, False, -1.0, 1.0, 0.0, 0.0, False, False, 22, 0.0)
-
-        create_audio_presentation("P1", "eng", LOUDSPEAKER_CONFIG_COMMON_USE_5_1_4, ["5.1.4 ME", "English Dialogue"])
-        create_audio_presentation("P2", "eng", LOUDSPEAKER_CONFIG_COMMON_USE_5_1, ["5.1 ME", "English Dialogue"])
-        create_audio_presentation("P3", "fra", LOUDSPEAKER_CONFIG_COMMON_USE_5_1_4, ["2.0 ME", "French Dialogue"])
-        create_audio_presentation("P4", "fra", LOUDSPEAKER_CONFIG_COMMON_USE_5_1, ["5.1 ME", "French Dialogue"])
-
-        add_audio_presentation_names_by_name(find_list_reference_by_name(audio_presentation_list, "P1"),
-                                             ["English Commentary", "eng", "Commentateur Anglais",
-                                              "fra", "German Commentary", "eng", "Commentateur Achtung", "ger"])
-
-        add_audio_presentation_names_by_name(find_list_reference_by_name(audio_presentation_list, "P2"), ["English-2", "eng", "Commentateur-2", "fra"])
-        add_audio_presentation_names_by_name(find_list_reference_by_name(audio_presentation_list, "P3"), ["English-3", "eng", "Commentateur-3", "fra"])
-        add_audio_presentation_names_by_name(find_list_reference_by_name(audio_presentation_list, "P4"), ["English-4", "eng", "Commentateur-4", "fra"])
-
-        # Configure IaT (UUID, timestamp)
-        add_iat(str(uuid.uuid4()), 12345678)
-        write_pmd_xml("pmd_created.xml")
-        print()      
-       """
-
-        loop_counter = 1
         startsecs = time.time()
 
-        for i in range(0, loop_counter):
+        for i in range(0, args.loop):
             a = 0
-            #my_metadata = parse_pmd_xml("pmd_gen.xml", PMD_XML_MODE_FILE)
-            #my_metadata = parse_pmd_xml("gen.pmd1.xml", PMD_XML_MODE_FILE)
-            me = populate_model_from_adm('skip_sadm.xml', PMD_XML_MODE_FILE)
-            #me = parse_adm_xml('serial_adm.xml', PMD_XML_MODE_FILE)
+            me = populate_model_from_adm(args.sadm, PMD_XML_MODE_FILE)
 
         endsecs = time.time()
-        call_time = (endsecs - startsecs) / loop_counter
+        call_time = (endsecs - startsecs) / args.loop
         print('Runtime = ' + str(endsecs - startsecs))
         print ('Call time = ' + str(call_time))
 
-        """
-         key_type = 'lineno'
-        limit = 10
-        snapshot = tracemalloc.take_snapshot()
-        snapshot = snapshot.filter_traces((tracemalloc.Filter(False, "<frozen importlib._bootstrap>"), tracemalloc.Filter(False, "<unknown>")))
-        top_stats = snapshot.statistics(key_type)
-        print("Top %s lines" % limit)
-        print('{: <10}'.format("index"), '{: <40}'.format("filename"), '{: <10}'.format("line no"), '{: <10}'.format("size kB"))
-        for index, stat in enumerate(top_stats[:limit], 1):
-            frame = stat.traceback[0]
-            filename = os.sep.join(frame.filename.split(os.sep)[-2:])
-            print('{: <10}'.format(index), '{: <40}'.format(filename), '{: <10}'.format(frame.lineno), '{:0.1f}'.format(stat.size / 1024), "kB")
-            line = linecache.getline(frame.filename, frame.lineno).strip()
-            if line:
-                print('    %s' % line)
-        other = top_stats[limit:]
-        if other:
-            size = sum(stat.size for stat in other)
-            print("%s other: %.1f KiB" % (len(other), size / 1024))
-        total = sum(stat.size for stat in top_stats)
-        print("Total allocated size: %.1f KiB" % (total / 1024))       
-        """
+        if args.debug:
+	        key_type = 'lineno'
+	        limit = 10
+	        snapshot = tracemalloc.take_snapshot()
+	        snapshot = snapshot.filter_traces((tracemalloc.Filter(False, "<frozen importlib._bootstrap>"), tracemalloc.Filter(False, "<unknown>")))
+	        top_stats = snapshot.statistics(key_type)
+	        print("Top %s lines" % limit)
+	        print('{: <10}'.format("index"), '{: <40}'.format("filename"), '{: <10}'.format("line no"), '{: <10}'.format("size kB"))
+	        for index, stat in enumerate(top_stats[:limit], 1):
+	            frame = stat.traceback[0]
+	            filename = os.sep.join(frame.filename.split(os.sep)[-2:])
+	            print('{: <10}'.format(index), '{: <40}'.format(filename), '{: <10}'.format(frame.lineno), '{:0.1f}'.format(stat.size / 1024), "kB")
+	            line = linecache.getline(frame.filename, frame.lineno).strip()
+	            if line:
+	                print('    %s' % line)
+	        other = top_stats[limit:]
+	        if other:
+	            size = sum(stat.size for stat in other)
+	            print("%s other: %.1f KiB" % (len(other), size / 1024))
+	        total = sum(stat.size for stat in top_stats)
+	        print("Total allocated size: %.1f KiB" % (total / 1024))       
 
     # ******************************************************************************************************************************************************** #
 
@@ -1149,8 +1156,8 @@ if __name__ == "__main__":
     # Example section for API calls, i.e. model driven by xml reader
     # ******************************************************************************************************************************************************** #
 
-    else:
-        my_metadata = parse_pmd_xml("pmd_gen2.xml", PMD_XML_MODE_FILE)
+    if args.pmd is not None:
+        my_metadata = parse_pmd_xml(args.pmd, PMD_XML_MODE_FILE)
     # ******************************************************************************************************************************************************** #
 
     # ******************************************************************************************************************************************************** #
