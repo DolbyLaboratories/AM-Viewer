@@ -17,7 +17,7 @@ If the audio bed does not contain the complete audio program and only contains m
 
 The list of presentations represent a set configurations that could be made available to use. Each presentation specifies a bed and selection of objects or elements to be included. Each presentation has a name and the language used for the name is specified as well as the language of the audio itself which is specified as the presentation language. Each presentation can be monitored by pressing the buttons on the left hand side. If the buttons are not enabled then GStreamer has not been detected as being installed. Pressing a button twice switches the audio off. The audio playback will react to changes in gain and object X position. Changes in object Y and Z position can not be detected as only stereo playback is supported.
 
-![Screenshot of AM Viewer](AM_Viewer.png)
+![Screenshot of AM Viewer](am_viewer.png)
 ## General System Requirements
 
 MacOS, Windows and Linux supported.
