@@ -71,7 +71,7 @@ from am_viewer.am_xml_viewer import isFileSADM
 import aoip_services.aoip_discovery
 import aoip_services.multicast
 
-__version__ = "3.9"
+__version__ = "3.13"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -376,22 +376,70 @@ def get_pmd_xml_from_klv(frame):
     return True
 
 
-def get_sadm_xml(frame):
+def get_2127hdr_sadm_xml(frame):
+
+    # -41 defragmentation is complete.
+    # Now remove -2127 header performing appropriate checks and
+    # checking to see if decompression is required
+    byte_count = 0
+    # Extract fields in Table 1 of SMPTE ST 2127-1
+    identifier = frame.payloads[0][byte_count]
+    byte_count += 1
+    # Reject if identifier is wrong or too small for a 1 byte payload
+    if not identifier == 2 or len(frame.payloads[0]) < 11:
+        return None
+    # length from Table 1 of SMPTE ST 2127-1
+    length1 = int.from_bytes(frame.payloads[0][byte_count:byte_count+4], 'big', signed=False)
+    # shorten payload by length and shave any excess,
+    frame.payloads[0] = frame.payloads[0][0:length1 + 5]
+    byte_count += 4
+    payload_tag = frame.payloads[0][byte_count]
+    byte_count += 1
+    if not payload_tag == 0x12: # payload tag value from SMPTE ST 2127-10 Table 1
+        return None
+    length2 = frame.payloads[0][byte_count] & 0x7f
+    length2_size = 1
+    if frame.payloads[0][byte_count] & 0x80 == 0x80:
+        length2_size = 1 + length2
+        length2 = int.from_bytes(frame.payloads[0][byte_count+1:(byte_count+length2_size)], 'big', signed=False)
+    # shorten payload by length and shave any excess
+    # add 2 because length doesn not include version or format
+    frame.payloads[0] = frame.payloads[0][0:byte_count + 2 + length2_size + length2]
+    byte_count += length2_size
+    version = frame.payloads[0][byte_count]
+    if not version == 0:
+        return None # unknown version
+    byte_count += 1
+    format = frame.payloads[0][byte_count]
+    if format > 1:
+        return None # unknown format
+    byte_count += 1
+    if format == 1:
+        gzip_data = frame.payloads[0][byte_count:]
+        try:
+            adm_xml = zlib.decompress(gzip_data, 15 + 32)
+        except:
+            adm_xml = None
+    else:
+        adm_xml = frame.payloads[0][byte_count:]
+    return adm_xml
+
+def get_2116hdr_sadm_xml(frame):
     index = 0
     if frame.sADM_assemble_flag == 1:
         assemble_info = get_word(frame.payloads[0], index, frame.bit_depth)
         in_timeline_flag = (assemble_info >> 4) & 0x3
         # Only support full frame mode so this must be 0
         if (in_timeline_flag != 0):
-            return(None)
+            return None
         #Commenting the next two elements out for speed as they are ignored
         #track_numbers = (assemble_info >> 6) & 0x3f
         #track_ID = (assemble_info >> 12) & 0x3f
-        index = index + 3
+        index = index + math.ceil(frame.bit_depth / 8)
     if frame.sADM_format_flag == 1:
         format_info = get_word(frame.payloads[0], index, frame.bit_depth)
         format_type = format_info >> (frame.bit_depth - 16) & 0xf
-        index = index + 3
+        index = index + math.ceil(frame.bit_depth / 8)
     else:
         format_type = 0
     if format_type == 1:
@@ -405,6 +453,11 @@ def get_sadm_xml(frame):
             adm_xml = None
     else:
         adm_xml = frame.payloads[0][index:]
+        # Strip trailing zeros that might exist to round out to whole sample
+        #
+        while len(adm_xml) > 0 and adm_xml[-1] == 0:
+            adm_xml = adm_xml[:-1]
+
     return adm_xml
 
 class State:
@@ -442,6 +495,7 @@ class pmdDeframer:
     class NewFrame:
         payloads = []
         format = None
+        container = None
         bit_depth = None
         subframe_mode = None
         right_not_left = None
@@ -451,6 +505,7 @@ class pmdDeframer:
         def __init__(self):
             self.payloads = []
             self.format = None
+            self.container = None
             self.bit_depth = None
             self.subframe_mode = None
             self.right_not_left = None
@@ -469,8 +524,14 @@ class pmdDeframer:
             else:
                 return False
 
-        def is_AESX242(self):
-            if self.format == "AESX242":
+        def is_SMPTE2110_31(self):
+            if self.container == "AM824":
+                return True
+            else:
+                return False
+
+        def is_SMPTE2110_41(self):
+            if self.container == "ST2110-41":
                 return True
             else:
                 return False
@@ -547,29 +608,77 @@ class pmdDeframer:
 
     def receivePacket(self, packet, codec):
         if codec == "AM824":
-            self.receiveSMPTEPacket(packet)
-        elif codec == "smpte336m":
-            self.receiveAESX242Packet(packet)
+            self.receive337Packet(packet)
+        elif codec == "ST2110-41":
+            self.receive2110_41Packet(packet)
         else:
             raise("Unknown format")
 
-    def receiveAESX242Packet(self, packet):
+    def receive2110_41Packet(self, packet):
         packet["UDP"].payload = scapy.RTP(packet["Raw"].load)
         # detect marker bit to see if this is the first packet of the KLVunit
-        if packet["RTP"].marker:
-            # See if we already have a payload, if so then we can process it
-            if len(self.payloads) > 0:
+
+        payload = bytes(packet["RTP"].payload)
+        # check we have enough bytes to check -41 header
+        if len(payload) < 8:
+            # if then discard
+            return
+        data_item_type = int.from_bytes(payload[0:4], byteorder='big')
+        data_item_type = data_item_type >> 10
+        data_item_length_words = int.from_bytes(payload[2:4], byteorder='big') & 0x1ff
+        data_item_length_bytes = data_item_length_words * 4
+        last_packet = ((int.from_bytes(payload[2:3], byteorder='big') & 0x2) >> 1) == 1
+        segment_data_offset = int.from_bytes(payload[4:8], byteorder='big')
+        first_packet = (segment_data_offset == 0)
+
+        # check we have a recognizable DIT i.e. sADM or PMD
+        if (data_item_type != 0x3ff000) and (data_item_type != 0x3ff001):
+            # if not then discard
+            return
+
+        # check to see if payload is big enough according to signaled length
+        if len(payload) < (data_item_length_bytes + 8):
+            # if not then shorten length
+            data_item_length_bytes = len(payload) - 8
+        if first_packet:
+            # Strip 2110-41 header
+            self.length_bytes = 0
+        new_payloads = bytearray(self.payloads)
+        new_payloads[(4 * segment_data_offset):(segment_data_offset * 4) + data_item_length_bytes] = bytearray(payload[8: 8 + data_item_length_bytes])
+        self.payloads = bytes(new_payloads)
+        self.length_bytes = self.length_bytes + data_item_length_bytes
+        if last_packet:
+            # last packet
+            # only sADM supported
+            if data_item_type == 0x3ff000:
+                format = "SADM"
+            else:
+                # unknown frame format
+                # this is theoretically unreachable unless DIT is corrupted
+                # This is assuming only fed by PMD Studio application at https://github.com/DolbyLaboratories/pmd_tool
+                format = "UNKNOWN"
+
+            if (format == "SADM") and (self.length_bytes == len(self.payloads)):
+                # always include assemble and format words in -41
                 next_frame = self.NewFrame()
-                next_frame.bit_depth = 24 # no unpacking required
-                next_frame.format = "AESX242"
+                next_frame.sADM_assemble_flag = 1
+                next_frame.sADM_format_flag = 1
+                next_frame.bit_depth = 16
+                next_frame.format = format
                 next_frame.payloads = [self.payloads]
+                next_frame.container = "ST2110-41"
+                next_frame.subframe_mode = None
                 self.new_frames.append(next_frame)
-            self.payloads = bytes(packet["RTP"].payload)
-        else:
-            self.payloads = self.payloads + bytes(packet["RTP"].payload)
+            else:
+                # Add PMD support here
+                # discard for now as not supported
+                # or incomplete
+                self.payloads = b''
+                self.length_bytes = 0
+
 
     # Receive raw packets as they are received
-    def receiveSMPTEPacket(self, packet):
+    def receive337Packet(self, packet):
 
         # Force packet to be interpreted as RTP
         packet["UDP"].payload = scapy.RTP(packet["Raw"].load)
@@ -696,6 +805,7 @@ class pmdDeframer:
                         self.next_frame.format = "SADM"
                         self.next_frame.sADM_assemble_flag = (Pc >> (self.next_frame.bit_depth - 7)) & 0x1
                         self.next_frame.sADM_format_flag = (Pc >> (self.next_frame.bit_depth - 6)) & 0x1
+                    self.next_frame.container = "AM824"
                     # adjust for Pe & Pf
                     #if self.data_type > 30:
                         # adjust for Pe and Pf
@@ -771,7 +881,6 @@ class PmdAdmDisplayGUI:
     XMLViewerRequest = False
     discoveryService = None
     start_time = 0
-    numCapturePackets = 42
     debug = False
     messageQueue = None
     multicast = None
@@ -798,7 +907,8 @@ class PmdAdmDisplayGUI:
     class Indicators:
         pmd = "gray"
         sadm = "gray"
-        aesx242 = "gray"
+        smpte2110_31 = "gray"
+        smpte2110_41 = "gray"
         frame = "gray"
         subframe = "gray"
         depth20 = "gray"
@@ -811,7 +921,8 @@ class PmdAdmDisplayGUI:
         depth24Ind = None
         pmdIndVar = None
         sadmIndVar = None
-        aesx242IndVar = None
+        smpte2110_31IndVar = None
+        smpte2110_41IndVar = None
         gui = None
         indFrame = None
 
@@ -819,10 +930,12 @@ class PmdAdmDisplayGUI:
             self.indFrame = indFrame
             self.pmdInd = Label(self.indFrame, text='PMD', variable=self.pmdIndVar, fg='black')
             self.pmdInd.pack(side=LEFT)
-            self.sadmInd = Label(self.indFrame, text='sADM', variable=self.sadmIndVar, fg='black')
+            self.sadmInd = Label(self.indFrame, text='S-ADM', variable=self.sadmIndVar, fg='black')
             self.sadmInd.pack(side=LEFT)
-            self.aesx242Ind = Label(self.indFrame, text='AES-X242', variable=self.aesx242IndVar, fg='black')
-            self.aesx242Ind.pack(side=LEFT)
+            self.smpte2110_31Ind = Label(self.indFrame, text='SMPTE2110-31', variable=self.smpte2110_31IndVar, fg='black')
+            self.smpte2110_31Ind.pack(side=LEFT)
+            self.smpte2110_41Ind = Label(self.indFrame, text='SMPTE2110-41', variable=self.smpte2110_41IndVar, fg='black')
+            self.smpte2110_41Ind.pack(side=LEFT)
 
             self.FrameInd = Label(self.indFrame, text='Frame', fg='black')
             self.FrameInd.pack(side=LEFT)
@@ -839,7 +952,8 @@ class PmdAdmDisplayGUI:
         def reset(self):
             self.pmd = "gray"
             self.sadm = "gray"
-            self.aesx242 = "gray"
+            self.smpte2110_31 = "gray"
+            self.smpte2110_41 = "gray"
             self.frame = "gray"
             self.subframe = "gray"
             self.depth20 = "gray"
@@ -849,61 +963,74 @@ class PmdAdmDisplayGUI:
         def update(self):
             self.pmdInd.config(bg=self.pmd)
             self.sadmInd.config(bg=self.sadm)
-            self.aesx242Ind.config(bg=self.aesx242)
+            self.smpte2110_31Ind.config(bg=self.smpte2110_31)
+            self.smpte2110_41Ind.config(bg=self.smpte2110_41)
             self.FrameInd.config(bg=self.frame)
             self.SubFrameInd.config(bg=self.subframe)
             self.depth20Ind.config(bg=self.depth20)
             self.depth24Ind.config(bg=self.depth24)
 
         def rxMetadata(self):
-            return self.pmd =="light green" or self.sadm =="light green" or self.aesx242 =="light green"
+            return self.pmd =="light green" or self.sadm =="light green" or self.smpte2110_41 =="light green"
 
         def pmdOn(self):
             if not self.pmd == "light green":
                 self.pmd = "light green"
                 self.sadm = "gray"
-                self.aesx242 = "gray"
                 self.gui.post("updateInd", None)
 
         def pmdError(self):
             if not self.pmd == "red":
                 self.pmd = "red"
                 self.sadm = "gray"
-                self.aesx242 = "gray"
                 self.gui.post("updateInd", None)
 
         def sadmOn(self):
             if not self.sadm == "light green":
                 self.sadm = "light green"
                 self.pmd = "gray"
-                self.aesx242 = "gray"
                 self.gui.post("updateInd", None)
 
         def sadmError(self):
             if not self.sadm == "red":
                 self.sadm = "red"
                 self.pmd = "gray"
-                self.aesx242 = "gray"
+                self.smpte2110_41 = "gray"
                 self.gui.post("updateInd", None)
 
-        def aesx242On(self):
-            if not self.aesx242 == "light green":
-                self.aesx242 = "light green"
+        def smpte2110_31On(self):
+            if not self.smpte2110_31 == "light green":
+                self.smpte2110_31 = "light green"
+                self.smpte2110_41 = "gray"
+                self.frame = "gray"
+                self.subframe = "gray"
+                self.gui.post("updateInd", None)
+
+        def smpte2110_31Error(self):
+            if not self.smpte2110_31 == "red":
+                self.smpte2110_31 = "red"
                 self.pmd = "gray"
                 self.sadm = "gray"
                 self.frame = "gray"
                 self.subframe = "gray"
                 self.gui.post("updateInd", None)
 
-        def aesx242Error(self):
-            if not self.aesx242 == "red":
-                self.aesx242 = "red"
+        def smpte2110_41On(self):
+            if not self.smpte2110_41 == "light green":
+                self.smpte2110_41 = "light green"
+                self.smpte2110_31 = "gray"
+                self.frame = "gray"
+                self.subframe = "gray"
+                self.gui.post("updateInd", None)
+
+        def smpte2110_41Error(self):
+            if not self.smpte2110_41 == "red":
+                self.smpte2110_41 = "red"
                 self.pmd = "gray"
                 self.sadm = "gray"
                 self.frame = "gray"
                 self.subframe = "gray"
                 self.gui.post("updateInd", None)
-
 
         def frameMode(self):
             if not self.frame == "light green":
@@ -1251,7 +1378,7 @@ class PmdAdmDisplayGUI:
             launchstr = launchstr.rstrip(', ')
             launchstr = launchstr + '>, <'
         launchstr = launchstr.rstrip('>, <')
-        launchstr = launchstr + '>>" ! playsink volume = 5 channels = 2'
+        launchstr = launchstr + '>>" ! playsink volume = 5'
         #launchstr = 'udpsrc address=239.150.138.1 port=5004 buffer-size=1000000 caps="application/x-rtp, media=(string)audio, clock-rate=(int)48000, channels = 9, encoding-name=(string)L16" ! rtpL16depay ! audio/x-raw,channels=9,channel-mask=(bitmask)0x000000000000 ! audioconvert mix-matrix="<<(float)1.0, (float)0.0, (float)1.0, (float)0.0, (float)1.0, (float)0.0, (float)1.0, (float)0.0, (float)0.0>, <(float)0.0, (float)1.0, (float)1.0, (float)0.0, (float)0.0, (float)1.0, (float)1.0, (float)0.0, (float)0.0>>" ! playsink volume = 5 channels = 2'
         return(launchstr)
 
@@ -1353,10 +1480,11 @@ class PmdAdmDisplayGUI:
         return True
 
     def launch_pipeline(self, launchstr):
-        args = ['gst-launch-1.0', '-q']
+        args = ['gst-launch-1.0']
         args = args + launchstr.split()
         shellState = (platform.system() == "Windows")
-        newAudioPipeLine = subprocess.Popen(args, shell=shellState, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        print(" ".join(args))
+        newAudioPipeLine = subprocess.Popen(args, shell=shellState) # , stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         if self.audioPipeLine is not None:
             self.stop_playback()
         self.audioPipeLine = newAudioPipeLine
@@ -1547,7 +1675,7 @@ class PmdAdmDisplayGUI:
             [command,messageData] = self.getMessage()
             if command == "newService":
                 newService = messageData
-                if newService.sdp.isAM824() or newService.sdp.isAESX242():
+                if newService.sdp.isAM824() or newService.sdp.is2110_41():
                     if self.debug:
                         print("Found ", newService.system, " Service ", newService.name)
                     self.serviceList.append(newService)
@@ -1559,11 +1687,6 @@ class PmdAdmDisplayGUI:
                     self.serviceMenu['menu'].delete(0, 'end')
                     for service in self.serviceNameList:
                         self.serviceMenu['menu'].add_command(label=service, command=lambda value=service: self.serviceSelection.set(value))
-                    # Set capture period according to received service type
-                    if newService.sdp.isAESX242():
-                        self.numCapturePackets = 1
-                    else:
-                        self.numCapturePackets = 42
                 elif newService.sdp.isAES67():
                     self.audioList.append(newService)
                     self.audioNameList.append(newService.system + ':' + newService.name)
@@ -1613,7 +1736,12 @@ class PmdAdmDisplayGUI:
 
             while not (self.mainThread.is_reset() or self.mainThread.stopped()):
                     try:
-                        packets = scapy.sniff(iface=self.interfaceName, filter="ip dst " + self.service.sdp.address + " and udp dst port " + str(self.service.sdp.port), count=self.numCapturePackets, timeout=1)
+                        # Set capture period according to received service type
+                        if self.service.sdp.is2110_41():
+                            numCapturePackets = 10
+                        else:
+                            numCapturePackets = 42
+                        packets = scapy.sniff(iface=self.interfaceName, filter="ip dst " + self.service.sdp.address + " and udp dst port " + str(self.service.sdp.port), count=numCapturePackets, timeout=1)
                     except RuntimeError as e:
                         print(e)
                         packets = []
@@ -1627,6 +1755,10 @@ class PmdAdmDisplayGUI:
                                 break
                         if deframer.haveFrame():
                             newFrame = deframer.getFrame()
+                            if newFrame.is_SMPTE2110_41():
+                                self.indicators.smpte2110_41On()
+                            if newFrame.is_SMPTE2110_31():
+                                self.indicators.smpte2110_31On()
                             try:
                                 if newFrame.is_pmd():
                                     if get_pmd_xml_from_wav(newFrame):
@@ -1644,7 +1776,12 @@ class PmdAdmDisplayGUI:
                                             traceback.print_exc(file=sys.stdout)
                                         raise RuntimeError("PMD conversion to XML failed!")
                                 elif newFrame.is_sADM():
-                                    xmlText = get_sadm_xml(newFrame)
+                                    if (newFrame.container == "ST2110-41"):
+                                        xmlText = get_2127hdr_sadm_xml(newFrame)
+                                    elif (newFrame.container == "AM824"):
+                                        xmlText = get_2116hdr_sadm_xml(newFrame)
+                                    else:
+                                        raise RuntimeError("Unknown SADM format")
                                     if xmlText is not None:
                                         try:
                                             self.model = populate_model_from_adm(xmlText, ADM_XML_MODE_STRING)
@@ -1658,24 +1795,12 @@ class PmdAdmDisplayGUI:
                                     else:
                                         self.indicators.sadmError()
                                         raise RuntimeError("SADM conversion to XML failed!")
-                                elif newFrame.is_AESX242():
-                                    if get_pmd_xml_from_klv(newFrame):
-                                        try:
-                                            self.model = parse_pmd_xml("pmd.xml", PMD_XML_MODE_FILE)
-                                        except:
-                                            self.indicators.aesx242Error()
-                                            raise RuntimeError("AESX242 XML parsing failed!")
-                                        self.post("updateModel", copy.deepcopy(self.model))
-                                        self.indicators.aesx242On()
-                                    else:
-                                        self.indicators.aesx242Error()
-                                        raise RuntimeError("AESX242 conversion to XML failed!")
                                 else:
                                     # received some unknown format
                                     self.indicators.reset()
 
                                 # Handle framing indicators for PMD & SADM
-                                if newFrame.is_pmd() or newFrame.is_sADM():
+                                if newFrame.is_SMPTE2110_31():
                                     if newFrame.subframe_mode:
                                         self.indicators.subFrameMode()
                                     else:
@@ -1687,7 +1812,7 @@ class PmdAdmDisplayGUI:
                                     self.indicators.depth24Mode()
 
                                 if (self.XMLViewerRequest):
-                                    if newFrame.is_pmd() or newFrame.is_AESX242():
+                                    if newFrame.is_pmd():
                                         with open("pmd.xml", "r") as xmlFile:
                                             xmlText = xmlFile.read()
                                         self.post("PMD XML", xmlText)
