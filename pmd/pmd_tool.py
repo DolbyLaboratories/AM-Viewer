@@ -1058,6 +1058,7 @@ def populate_model_from_adm(xml_struct, mode):
     # Create audio presentations out of audio_programme and audio_content pieces
     for i in range(0, len(my_adm_metadata.audio_programme)):
         list = []
+        max_chan = 0
         name = my_adm_metadata.audio_programme[i].name
 
         # Get id's of beds and objects
@@ -1065,8 +1066,31 @@ def populate_model_from_adm(xml_struct, mode):
             # Expect there to only be a single entry for audio_object_idref in each audioContent element
             list.append(int(my_adm_metadata.audio_programme[i].audio_content_idref[j].audio_object_idref[0].id[3:], 16) - 0x1000)
 
+        # Find biggest bed size in programme to set presentation config
+        for j in range(0, len(list)):
+            for k in range(0, len(audio_bed_list)):
+                if list[j] == audio_bed_list[k].id:
+                    if len(audio_bed_list[k].output_targets) > max_chan:
+                        max_chan = len(audio_bed_list[k].output_targets)
+
+        # Based upon max_chan, get config
+            # If no bed found in this programme then max_chan will be 0, so default to 5.1.4
+            if max_chan == 0:
+                config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1_4
+            elif max_chan == 2:
+                config = LOUDSPEAKER_CONFIG_COMMON_USE_2_0
+            elif max_chan == 3:
+                config = LOUDSPEAKER_CONFIG_COMMON_USE_3_0
+            elif max_chan == 6:
+                config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1
+            elif max_chan == 8:
+                config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1_2
+            elif max_chan == 10:
+                config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1_4
+            elif max_chan == 12:
+                config = LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4
+
         # Create presentation
-        # z = int(my_adm_metadata.audio_programme[i].id[4:], 16) - 0x1000
         create_audio_presentation("P" + str(i), my_adm_metadata.audio_programme[i].language, config, list,
                                   int(my_adm_metadata.audio_programme[i].id[4:], 16) - 0x1000)
 
@@ -1098,7 +1122,6 @@ if __name__ == "__main__":
     import sys
     import argparse
 
-
     parser = argparse.ArgumentParser(description='PMD/ADM Python Model Test')
     parser.add_argument('-pmd', type=argparse.FileType('r'), default=None, help='PMD XML filename for input')
     parser.add_argument('-sadm', type=argparse.FileType('r'), default=None, help='SADM XML filename for input')
@@ -1115,7 +1138,7 @@ if __name__ == "__main__":
         import linecache
         import time
         if args.debug:
-        	tracemalloc.start()
+            tracemalloc.start()
 
         startsecs = time.time()
 
@@ -1128,27 +1151,31 @@ if __name__ == "__main__":
         print('Runtime = ' + str(endsecs - startsecs))
         print ('Call time = ' + str(call_time))
 
+"""
+
         if args.debug:
-	        key_type = 'lineno'
-	        limit = 10
-	        snapshot = tracemalloc.take_snapshot()
-	        snapshot = snapshot.filter_traces((tracemalloc.Filter(False, "<frozen importlib._bootstrap>"), tracemalloc.Filter(False, "<unknown>")))
-	        top_stats = snapshot.statistics(key_type)
-	        print("Top %s lines" % limit)
-	        print('{: <10}'.format("index"), '{: <40}'.format("filename"), '{: <10}'.format("line no"), '{: <10}'.format("size kB"))
-	        for index, stat in enumerate(top_stats[:limit], 1):
-	            frame = stat.traceback[0]
-	            filename = os.sep.join(frame.filename.split(os.sep)[-2:])
-	            print('{: <10}'.format(index), '{: <40}'.format(filename), '{: <10}'.format(frame.lineno), '{:0.1f}'.format(stat.size / 1024), "kB")
-	            line = linecache.getline(frame.filename, frame.lineno).strip()
-	            if line:
-	                print('    %s' % line)
-	        other = top_stats[limit:]
-	        if other:
-	            size = sum(stat.size for stat in other)
-	            print("%s other: %.1f KiB" % (len(other), size / 1024))
-	        total = sum(stat.size for stat in top_stats)
-	        print("Total allocated size: %.1f KiB" % (total / 1024))       
+            key_type = 'lineno'
+            limit = 10
+            snapshot = tracemalloc.take_snapshot()
+            snapshot = snapshot.filter_traces((tracemalloc.Filter(False, "<frozen importlib._bootstrap>"), tracemalloc.Filter(False, "<unknown>")))
+            top_stats = snapshot.statistics(key_type)
+            print("Top %s lines" % limit)
+            print('{: <10}'.format("index"), '{: <40}'.format("filename"), '{: <10}'.format("line no"), '{: <10}'.format("size kB"))
+            frame = stat.traceback[0]
+            filename = os.sep.join(frame.filename.split(os.sep)[-2:])
+            print('{: <10}'.format(index), '{: <40}'.format(filename), '{: <10}'.format(frame.lineno), '{:0.1f}'.format(stat.size / 1024), "kB")
+            line = linecache.getline(frame.filename, frame.lineno).strip()
+            if line:
+                print('    %s' % line)
+	            other = top_stats[limit:]
+            if other:
+                size = sum(stat.size for stat in other)
+                print("%s other: %.1f KiB" % (len(other), size / 1024))
+                total = sum(stat.size for stat in top_stats)
+            print("Total allocated size: %.1f KiB" % (total / 1024))
+
+
+"""
 
     # ******************************************************************************************************************************************************** #
 
@@ -1156,8 +1183,8 @@ if __name__ == "__main__":
     # Example section for API calls, i.e. model driven by xml reader
     # ******************************************************************************************************************************************************** #
 
-    if args.pmd is not None:
-        my_metadata = parse_pmd_xml(args.pmd, PMD_XML_MODE_FILE)
+    #if args.pmd is not None:
+        #my_metadata = parse_pmd_xml(args.pmd, PMD_XML_MODE_FILE)
     # ******************************************************************************************************************************************************** #
 
     # ******************************************************************************************************************************************************** #
@@ -1165,5 +1192,5 @@ if __name__ == "__main__":
     # ******************************************************************************************************************************************************** #
 
     # !!!!! Not finished yet !!!!!
-        write_pmd_xml("pmd_created.xml")
+        #write_pmd_xml("pmd_created.xml")
     # ******************************************************************************************************************************************************** #
