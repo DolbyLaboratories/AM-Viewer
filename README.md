@@ -80,11 +80,9 @@ The stream mode is used then a list of interfaces and a list of available servic
 
 When receiving a stream the 'XML' can be pressed at anytime to yield a static XMl snapshot. The XML tree can be explored by expand the various levels of the tree in the XML viewer windows.
 
-Several indicators on the bottom bar show status. The PMD indicator will be green when receiving PMD and grey when not. If an error is received the PMD indicator will flash or stay red for continuous errors. The SADM and AES-X242 indicators work in the same way. The subframe-mode / frame mode indicators indicate whether the received stream is using the frame mode or subframe mode of the SMPTE ST 337 container format inside the SMPTE 2110-31 stream. This indicator is not applicable for AES-X242 streams which do not use SMPTE frames.
+Several indicators on the bottom bar show status. The Serial ADM indicator will be green when receiving Serial ADM in any container and grey when not. If an error is received the PMD indicator will flash or stay red for continuous errors. The bit depth and container indicators work in the same way. The subframe-mode / frame mode indicators indicate whether the received stream is using the frame mode or subframe mode of the SMPTE ST 337 container format inside the SMPTE 2110-31 stream. This indicator is not applicable for SMPTE ST 2110-41 streams which do not use SMPTE frames.
 
 ## Known Limitations
-
-Only a bit depth of 20 bits is supported for ST 2110-31 based streams. As it is known that 24 bit is being used for sADM, this is planned to be added in the next release.  
 
 Only sADM full frame mode is supported. Both gzip and plain XML sADM modes are supported but only gzip has been thoroughly tested.
 
