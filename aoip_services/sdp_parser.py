@@ -74,8 +74,8 @@ class sdp_parser:
     def isAM824(self):
         return((self.codec == "AM824") and (self.fs == 48000) and (self.channels == 2))
 
-    def isAESX242(self):
-        return(self.codec == "smpte336m")
+    def is2110_41(self):
+        return(self.codec == "ST2110-41")
 
     def isAES67(self):
         return(self.codec == "L16" or self.codec == "L24")
