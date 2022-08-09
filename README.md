@@ -3,7 +3,8 @@
 
 ## Overview
 
-This is a python based realtime viewer for PMD, Serial ADM and AES-X242. Once running the viewer can detect real-time changes in the metadata and display them in real-time. The purpose of the viewer is to be able to demonstrate the real-time capabilities of the various formats by allowing the dynamic behaviour to be viewed. The viewer also supports static display of the underlying XML representation.
+This is a python based realtime viewer for Serial ADM carried over SMPTE ST 2110-31 and -41. It also supports display of PMD (RDD 49) over ST 2110-31.
+Once running the viewer can detect real-time changes in the metadata and display them in real-time. The purpose of the viewer is to be able to demonstrate the real-time capabilities of the various formats by allowing the dynamic behaviour to be viewed. The viewer also supports static display of the underlying XML representation.
 
 The User interface has three main sections:
 - Audio Beds
@@ -93,7 +94,7 @@ When playing back presentations that include VDS (Audio Description) dialogue ob
 ## License
 
  AM Viewer
- Copyright (c) 2020, Dolby Laboratories Inc.
+ Copyright (c) 2022, Dolby Laboratories Inc.
  All rights reserved.
  
  Redistribution and use in source and binary forms, with or without modification, are permitted
