@@ -28,6 +28,8 @@ import socket
 import sys
 import platform
 import struct
+import zeroconf
+import scapy.all as scapy
 from time import sleep
 from typing import cast
 
@@ -38,7 +40,6 @@ import aoip_services.sdp_parser
 from tkinter import *
 import errno
 from urllib.parse import quote
-import netifaces
 import sys
 
 sap_addr = "239.255.255.255"
@@ -136,7 +137,7 @@ class aoip_discovery:
         # if bogus interface names are supplied, remove them
         # if we end up with an empty list then the default interface will be used
         self.interface_list = interface_list
-        known_ifaces = netifaces.interfaces()
+        known_ifaces = scapy.get_if_list()
         for iface in interface_list:
             if iface not in known_ifaces:
                 interface_list.remove(iface)
@@ -176,7 +177,7 @@ class aoip_discovery:
             self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
         else:
             for iface in self.interface_list:
-                localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+                localIp = scapy.get_if_addr(iface)
                 membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))
         # See http://www.tldp.org/HOWTO/Multicast-HOWTO-6.html for explanation of sockopts
                 self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
@@ -218,7 +219,7 @@ class aoip_discovery:
         if platform.system() == 'Windows':
             return
         self.interface_list.append(iface)
-        localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+        localIp = scapy.get_if_addr(iface)
         membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))
         # See http://www.tldp.org/HOWTO/Multicast-HOWTO-6.html for explanation of sockopts
         self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership_request)
@@ -227,7 +228,7 @@ class aoip_discovery:
         if platform.system() == 'Windows':
             return
         self.interface_list.remove(iface)
-        localIp = netifaces.ifaddresses(iface)[netifaces.AF_INET][0]['addr']
+        localIp = scapy.get_if_addr(iface)
         membership_request = struct.pack("4s4s", socket.inet_aton(sap_addr), socket.inet_aton(localIp))
         self.dante_sock.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP, membership_request)
 

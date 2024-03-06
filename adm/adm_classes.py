@@ -165,6 +165,16 @@ class AudioProgramme:
         self.audio_programme_label = []
         self.audio_content_idref = []
         self.loudness_metadata = None
+        self.alternative_value_set_idref = []
+        self.needs_unrolling = False
+
+
+class RolledProgramme:
+    def __init__(self, programme_id):
+        self.id = programme_id
+        self.audio_object_group_leader = None
+        self.audio_content_idref = []
+        self.audio_object_idref = []
 
 
 class AudioContent:
@@ -173,6 +183,12 @@ class AudioContent:
         self.name = name
         self.dialogue = None
         self.audio_object_idref = []
+
+
+class Gain:
+    def __init__(self, gain_unit, gain_value):
+        self.gain_unit = gain_unit
+        self.gain_value = gain_value
 
 
 class Dialogue:
@@ -186,6 +202,14 @@ class Dialogue:
             self.content_kind = DialogueContentKind(classification)
         elif value == MIXED_CONTENT:
             self.content_kind = MixedContentKind(classification)
+
+
+class AlternativeValueSet:
+    def __init__(self, id):
+        self.id = id
+        self.gain = None
+        self.audio_object_interaction = None
+        self.position_offset = None
 
 
 class NonDialogueContentKind:
@@ -212,10 +236,27 @@ class AudioObject:
         self.name = name
         self.audio_pack_idref = []
         self.audio_track_idref = []
+        self.audio_object_idref = []
         self.head_locked = None
+        self.gain = {'gain_value': 0.0, 'gain_unit': 'dB'}
+        self.audio_complementary_object_idref = []
+        self.alternative_value_set = []
+
+
+class Gain:
+    def __init__(self, gain_unit='dB', gain_value=0.0):
+        self.gain_unit = gain_unit
+        self.gain_value = gain_value
+        
+
+class AlternativeValueSet:
+    def __init__(self, id):
+        self.id = id
         self.gain = None
-
-
+        self.audio_object_interaction = None
+        self.position_offset = None
+        
+        
 class AudioChannelFormat:
     def __init__(self, id, name):
         self.id = id

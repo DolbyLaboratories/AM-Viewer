@@ -51,13 +51,14 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 # ************************************************************************************************************************************************************ #
 # ************************************************************************************************************************************************************ #
 
-NON_DIALOGUE_CONTENT_KIND = ["undefined", "music", "effect"]
+NON_DIALOGUE_CONTENT_KIND = ["undefined", "music", "effect", "music and effects"]
 DIALOGUE_CONTENT_KIND = ["undefined", "dialogue", "voiceover", "spoken subtitle", "audio description", "commentary", "emergency"]
-MIXED_CONTENT_KIND = ["undefined", "complete main", "mixed", "hearing impaired"]
+MIXED_CONTENT_KIND = ["undefined", "complete main", "mixed", "hearing impaired", "audio description/visually impaired"]
 DIALOGUE_TEXT = ["nonDialogueContentKind", "dialogueContentKind", "mixedContentKind"]
 COORDINATE_MODE = ["Polar", "Cartesian"]
 TYPE_DEFINITION = ["Invalid", "DirectSpeakers", "Matrix", "Objects", "HOA", "Binaural"]
 TYPE_LABEL = ["Invalid", "0001", "0002", "0003", "0004", "0005"]
+SUPPORTED_COMMON_DEFS = ['AP_00010002', 'AP_0001000a', 'AP_00010003', 'AP_00010013', 'AP_00010005', 'AP_00010017']
 
 AUDIO_PACK_STR = "AP_000"
 AUDIO_PROGRAMME_STR = "APR_"
@@ -210,6 +211,7 @@ ADM_XML_APR_ELN_SE_PL = 'audioProgrammeLabel'
 ADM_XML_APR_ELN_SE_PL_AT_LN = 'language'
 ADM_XML_APR_ELN_SE_CR = 'audioContentIDRef'
 ADM_XML_APR_ELN_SE_LM = 'loudnessMetadata'
+ADM_XML_APR_ELN_SE_AV = 'alternativeValueSetIDRef'
 
 ADM_XML_ACO_ELN = 'audioContent'
 ADM_XML_ACO_ELN_AT_ID = 'audioContentID'
@@ -228,6 +230,8 @@ ADM_XML_AOB_ELN_SE_AP = 'audioPackFormatIDRef'
 ADM_XML_AOB_ELN_SE_AT = 'audioTrackUIDRef'
 ADM_XML_AOB_ELN_SE_HL = 'headLocked'
 ADM_XML_AOB_ELN_SE_GN = 'gain'
+ADM_XML_AOB_ELN_SE_CO = 'audioComplementaryObjectIDRef'
+ADM_XML_AOB_ELN_SE_AV = 'alternativeValueSet'
 
 ADM_XML_APF_ELN = 'audioPackFormat'
 ADM_XML_APF_ELN_AT_ID = 'audioPackFormatID'
@@ -261,6 +265,13 @@ SADM_XML_TTF_ELN = 'transportTrackFormat'
 SADM_XML_TTF_ELN_SE_AT = 'audioTrack'
 SADM_XML_TTF_ELN_SE_AT_SE_AR = 'audioTrackUIDRef'
 SADM_XML_TTF_ELN_SE_AT_AT_TI = 'trackID'
+
+SADM_XML_FRM_AT_VER = 'version'
+SADM_XML_FRM_AT_VER_OV = 'ITU-R_BS.2125-0'
+ADM_XML_FRM_AT_VER_OV = 'ITU-R_BS.2076-0'
+ADVSS_PROFILE_NAME = 'AdvSS Emission ADM and S-ADM Profile'
+TARGET_ADM_VER = 'ITU-R_BS.2076-3'
+TARGET_SADM_VER = 'ITU-R_BS.2125-1'
 
 ADM_XML_INDENT = "  "
 PMD_XML_MODE_FILE = 0

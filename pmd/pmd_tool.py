@@ -52,6 +52,8 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 # # ************************************************************************************************************************************************************ #
 #
 # # Consts
+import copy
+
 from pmd.pmd_const import LOUDSPEAKER_CONFIG_HORIZONTAL_SPEAKER_OUTPUT_TARGETS, OBJECT_CLASSES
 
 from pmd.pmd_const import MIN_MAX_AZIMUTH, MIN_MAX_ELEVATION, MIN_MAX_DISTANCE
@@ -178,8 +180,15 @@ from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_IAT_SE_CID
 from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_IAT_SE_UUI
 from pmd.pmd_const import PMD_XML_ROOT_SE_PMD_SE_IAT_SE_TST
 
+from pmd.pmd_const import APID
+from pmd.pmd_const import EITA
+from pmd.pmd_const import EITR
+from pmd.pmd_const import AVSD
+
 # Classes
-from pmd.pmd_classes import ProfessionalMetadata, AudioPresentation, AudioBed, AudioObject, AudioSignal, OutputTarget, IaT, PresentationNameLanguage
+from pmd.pmd_classes import ProfessionalMetadata, AudioPresentation, AudioBed, AudioObject, AudioSignal
+from pmd.pmd_classes import OutputTarget, IaT, PresentationNameLanguage, Coordinate, CartCoordinate, MetadataContainer
+from adm.adm_classes import AudioPackFormat
 
 # External system
 import logging
@@ -190,8 +199,7 @@ import tracemalloc
 
 # ADM bits and pieces
 
-
-
+#from adm.adm_tool import parse_adm_xml
 from adm.adm_tool import parse_adm_xml
 from adm.adm_const import ADM_XML_MODE_FILE, ADM_XML_INT_TYP_DS, ADM_XML_INT_TYP_OB
 from adm.adm_const import NON_DIALOGUE_CONTENT, DIALOGUE_CONTENT, MIXED_CONTENT
@@ -199,7 +207,7 @@ from adm.adm_const import NON_DIALOGUE_CONTENT, DIALOGUE_CONTENT, MIXED_CONTENT
 from adm.adm_const import ADM_NON_DIALOGUE_CONTENT_KIND, ADM_DIALOGUE_CONTENT_KIND, ADM_MIXED_CONTENT_KIND
 from adm.adm_const import ADM_DIALOGUE_CONTENT_KIND_UNDEFINED, ADM_DIALOGUE_CONTENT_KIND_DIALOGUE, ADM_DIALOGUE_CONTENT_KIND_VOICEOVER
 from adm.adm_const import ADM_DIALOGUE_CONTENT_KIND_SPOKEN_SUBTITLE, ADM_DIALOGUE_CONTENT_KIND_AUDIO_DESCRIPTION, ADM_DIALOGUE_CONTENT_KIND_COMMENTARY
-from adm.adm_const import ADM_DIALOGUE_CONTENT_KIND_EMERGENCY
+from adm.adm_const import ADM_DIALOGUE_CONTENT_KIND_EMERGENCY, SUPPORTED_COMMON_DEFS
 
 
 # Globals to keep track of ID allocation, lists etc.
@@ -283,23 +291,23 @@ def create_object(name, classification, dynamic_updates, azimuth_or_x, elevation
     global audio_element_counter, audio_object_counter, audio_signal_counter, audio_signal_list, audio_object_list, audio_element_list
 
     # Check parameter types
-    check_parameter_type(name, str, create_object)
-    check_parameter_type(classification, int, create_object)
-    check_parameter_type(dynamic_updates, bool, create_object)
-    check_parameter_type(azimuth_or_x, float, create_object)
-    check_parameter_type(elevation_or_y, float, create_object)
-    check_parameter_type(distance_or_z, float, create_object)
-    check_parameter_type(size, float, create_object)
-    check_parameter_type(size_3d, bool, create_object)
-    check_parameter_type(diverge, bool, create_object)
-    check_parameter_type(audio_signal, int, create_object)
-    check_parameter_type(source_gain_db, float, create_object)
+    #check_parameter_type(name, str, create_object)
+    #check_parameter_type(classification, int, create_object)
+    #check_parameter_type(dynamic_updates, bool, create_object)
+    #check_parameter_type(azimuth_or_x, float, create_object)
+    #check_parameter_type(elevation_or_y, float, create_object)
+    #check_parameter_type(distance_or_z, float, create_object)
+    #check_parameter_type(size, float, create_object)
+    #check_parameter_type(size_3d, bool, create_object)
+    #check_parameter_type(diverge, bool, create_object)
+    #check_parameter_type(audio_signal, int, create_object)
+    #check_parameter_type(source_gain_db, float, create_object)
 
     # Range check parameters
-    check_parameter_value_range(size, MIN_SIZE, MAX_SIZE, create_object)
-    check_parameter_value_range(audio_signal, MIN_AUDIO_SIGNAL, MAX_AUDIO_SIGNAL, create_object)
-    check_parameter_value_range(source_gain_db, MIN_SOURCE_GAIN_DB, MAX_SOURCE_GAIN_DB, create_object)
-    check_positional_coordinates_in_range(azimuth_or_x, elevation_or_y, distance_or_z, create_object)
+    #check_parameter_value_range(size, MIN_SIZE, MAX_SIZE, create_object)
+    #check_parameter_value_range(audio_signal, MIN_AUDIO_SIGNAL, MAX_AUDIO_SIGNAL, create_object)
+    #check_parameter_value_range(source_gain_db, MIN_SOURCE_GAIN_DB, MAX_SOURCE_GAIN_DB, create_object)
+    #check_positional_coordinates_in_range(azimuth_or_x, elevation_or_y, distance_or_z, create_object)
 
     # Add AudioSignal entry to audio_signal_list if it doesn't already exist, if exists save index for later
     ok_to_add = True
@@ -844,97 +852,6 @@ def write_pmd_xml(xml_file):
         text_file.write(prettify_xml(root))
     return
 
-"""
-def write_pmd_xml_from_external(xml_file, ext_audio_signal_list, ext_audio_bed_list, ext_audio_object_list, ext_audio_presentation_list, ext_iat_list):
-    # Reorder audio signals list (if need be, it looks nicer) so that id values are ascending
-    ext_audio_signal_list.sort(key=lambda x: x.id, reverse=False)
-
-    root = ET.Element(PMD_XML_ROOT)
-    root.append(ET.Comment(PMD_XML_ROOT_CMT))
-
-    container_config = ET.SubElement(root, PMD_XML_ROOT_SE_CONTAINER)
-    ET.SubElement(container_config, PMD_XML_ROOT_SE_CONTAINER_SE_SMP_OST).text = '0'
-    ET.SubElement(container_config, PMD_XML_ROOT_SE_CONTAINER_SUB_E_D_TAGS)
-
-    professional_metadata = ET.SubElement(root, PMD_XML_ROOT_SE_PMD, {PMD_XML_ROOT_SE_PMD_AT_VER: PMD_XML_ROOT_SE_PMD_AT_VER_VAL})
-
-    ET.SubElement(professional_metadata, PMD_XML_ROOT_SE_PMD_SE_TTL)
-    audio_signals = ET.SubElement(professional_metadata, PMD_XML_ROOT_SE_PMD_SE_ASG)
-    audio_elements = ET.SubElement(professional_metadata, PMD_XML_ROOT_SE_PMD_SE_AEL)
-    audio_presentations = ET.SubElement(professional_metadata, PMD_XML_ROOT_SE_PMD_SE_APR)
-    iat = ET.SubElement(professional_metadata, PMD_XML_ROOT_SE_PMD_SE_IAT)
-
-    # Copy audio_signals_list into audio_signals tree
-    for i in range(0, len(ext_audio_signal_list)):
-        audio_signal = ET.SubElement(audio_signals, PMD_XML_ROOT_SE_PMD_SE_ASG_SE_ASG, {PMD_XML_ATTRIB_ID: str(ext_audio_signal_list[i].id)})
-        audio_signal_name = ET.SubElement(audio_signal, PMD_XML_ROOT_SE_PMD_SE_ASG_SE_ASG_NME)
-        audio_signal_name.text = ext_audio_signal_list[i].name
-
-    # Copy all audio_elements_list into audio elements tree
-    # Beds
-    for i in range(0, len(ext_audio_bed_list)):
-        audio_bed = ET.SubElement(audio_elements, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB, {PMD_XML_ATTRIB_ID: str(ext_audio_bed_list[i].id)})
-        ET.SubElement(audio_bed, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_NME).text = ext_audio_bed_list[i].name
-        ET.SubElement(audio_bed, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_CFG).text = ext_audio_bed_list[i].speaker_config
-        audio_bed_output_targets = ET.SubElement(audio_bed, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG)
-
-        # Loop through all output targets and populate
-        for j in range(0, len(ext_audio_bed_list[i].output_targets)):
-            audio_bed_output_target = ET.SubElement(audio_bed_output_targets, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG,
-                                                    {PMD_XML_ATTRIB_ID: str(ext_audio_bed_list[i].output_targets[j].target)})
-
-            # TODO add support for output targets to have more than one audio signal + gain attribute, i.e. support beyond direct beds
-            # Loop through all audio signals for each target
-            audio_signals = ET.SubElement(audio_bed_output_target, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG_SE_ASG)
-            for k in range(0, len(ext_audio_bed_list[i].output_targets[j].audio_signals)):
-                ET.SubElement(audio_signals, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AB_SE_OTG_SE_OTG_SE_ASG_SE_IDS).text\
-                    = str(ext_audio_bed_list[i].output_targets[j].audio_signals[k].id)
-
-    # Objects
-    for i in range(0, len(ext_audio_object_list)):
-        audio_object = ET.SubElement(audio_elements, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO, {PMD_XML_ATTRIB_ID: str(ext_audio_object_list[i].id)})
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_NME).text = ext_audio_object_list[i].name
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_CLS).text = OBJECT_CLASSES[ext_audio_object_list[i].classification]
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_DUP).text = str(ext_audio_object_list[i].dynamic_updates)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_XPS).text = str(ext_audio_object_list[i].azimuth_or_x)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_YPS).text = str(ext_audio_object_list[i].elevation_or_y)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_ZPS).text = str(ext_audio_object_list[i].distance_or_z)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_SIZ).text = str(ext_audio_object_list[i].size)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_S3D).text = str(ext_audio_object_list[i].size_3d)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_DVG).text = str(ext_audio_object_list[i].diverge)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_ASG).text = str(ext_audio_object_list[i].audio_signal.id)
-        ET.SubElement(audio_object, PMD_XML_ROOT_SE_PMD_SE_AEL_SE_AO_SE_SGD).text = str(ext_audio_object_list[i].source_gain_db)
-
-    # Copy presentations
-    for i in range(0, len(ext_audio_presentation_list)):
-        audio_presentation = ET.SubElement(audio_presentations, PMD_XML_ROOT_SE_PMD_SE_APR_SE_APR, {PMD_XML_ATTRIB_ID: str(ext_audio_presentation_list[i].id)})
-
-        # Loop through names list
-        for j in range(0, len(ext_audio_presentation_list[i].name_language)):
-            ET.SubElement(audio_presentation, PMD_XML_ROOT_SE_PMD_SE_APR_SE_NME, {PMD_XML_ROOT_SE_PMD_SE_APR_AT_LNG:
-                          ext_audio_presentation_list[i].name_language[j].language}).text = ext_audio_presentation_list[i].name_language[j].name
-        ET.SubElement(audio_presentation, PMD_XML_ROOT_SE_PMD_SE_APR_SE_CFG).text = ext_audio_presentation_list[i].config
-        ET.SubElement(audio_presentation, PMD_XML_ROOT_SE_PMD_SE_APR_SE_LNG).text = ext_audio_presentation_list[i].language
-
-        # Loop through elements list
-        for j in range(0, len(ext_audio_presentation_list[i].elements)):
-            ET.SubElement(audio_presentation, PMD_XML_ROOT_SE_PMD_SE_APR_SE_EMT).text = str(ext_audio_presentation_list[i].elements[j].id)
-
-    # Copy iat_list into iat tree
-    for i in range(0, len(ext_iat_list)):
-        iat_content_id = ET.SubElement(iat, PMD_XML_ROOT_SE_PMD_SE_IAT_SE_CID)
-        iat_content_id_uuid = ET.SubElement(iat_content_id, PMD_XML_ROOT_SE_PMD_SE_IAT_SE_UUI)
-        iat_content_id_uuid.text = ext_iat_list[0].content_uuid
-
-        iat_timestamp = ET.SubElement(iat, PMD_XML_ROOT_SE_PMD_SE_IAT_SE_TST)
-        iat_timestamp.text = str(ext_iat_list[0].time_stamp)
-
-    # Write cleaned up xml to disk
-    with open(xml_file, "w") as text_file:
-        text_file.write(prettify_xml(root))
-    return
-"""
-
 
 def start_logging():
     logging.basicConfig(level=logging.ERROR, format='%(asctime)s %(levelname)s %(message)s', filename=PMD_LOG_FILE, filemode='w')
@@ -981,11 +898,91 @@ def populate_model_from_adm(xml_struct, mode):
     audio_object_counter = 0
     audio_bed_counter = 0
     audio_signal_counter = 0
+    new_avs_counter = 1
 
     my_adm_metadata = parse_adm_xml(xml_struct, mode)
 
+    # Create copies of objects if they contain alternative values sets
+    new_avs_objects = []
+
     for i in range(0, len(my_adm_metadata.audio_object)):
-        if int(my_adm_metadata.audio_object[i].audio_pack_idref[0].type_label) == ADM_XML_INT_TYP_DS:
+        if len(my_adm_metadata.audio_object[i].alternative_value_set) > 0:
+            for j in range(0, len(my_adm_metadata.audio_object[i].alternative_value_set)):
+                a = copy.deepcopy(my_adm_metadata.audio_object[i])
+                a.name = a.name + ':' + my_adm_metadata.audio_object[i].alternative_value_set[j]['alternative_value_set_id']
+                new_id = a.id[:4] + str(new_avs_counter) + a.id[5:]
+                a.id = new_id
+                new_avs_counter += 1
+                # Get alternative value set gain
+                if 'gain_value' in my_adm_metadata.audio_object[i].alternative_value_set[j]:
+                    a.gain['gain_value'] = my_adm_metadata.audio_object[i].alternative_value_set[j]['gain_value']
+                # Get alternative value set positional offset
+                if 'offset' in my_adm_metadata.audio_object[i].alternative_value_set[j]:
+                    b = float(a.audio_pack_idref[0].audio_channel_idref[0].audio_block.position_coord.x_or_az)
+                    c = float(my_adm_metadata.audio_object[i].alternative_value_set[j]['offset'])
+                    a.audio_pack_idref[0].audio_channel_idref[0].audio_block.position_coord.x_or_az = str(b + c)
+                new_avs_objects.append(a)
+
+    # Add new objects to list
+    for i in range(0, len(new_avs_objects)):
+        # Clear alternative value sets in copied objects
+        new_avs_objects[i].alternative_value_set.clear()
+        my_adm_metadata.audio_object.append(new_avs_objects[i])
+
+    convert_bed = False
+    pack_object_exists = False
+
+    for i in range(0, len(my_adm_metadata.audio_object)):
+        if isinstance(my_adm_metadata.audio_object[i].audio_pack_idref, str):
+            pack_object_exists = False
+            if my_adm_metadata.audio_object[i].audio_pack_idref == 'AP_00010001':
+                a = my_adm_metadata.audio_object[i].id
+                for m in range(0, len(my_adm_metadata.audio_content)):
+                    for n in range(0, len(my_adm_metadata.audio_content[m].audio_object_idref)):
+                        if my_adm_metadata.audio_object[i].id == my_adm_metadata.audio_content[m].audio_object_idref[n].id:
+                            if my_adm_metadata.audio_content[m].dialogue.value == 1:
+                                convert_bed = True
+                            else:
+                                convert_bed = False
+        else:
+            pack_object_exists = True
+
+        if pack_object_exists is False and convert_bed is False:
+            name = ''
+            if my_adm_metadata.audio_object[i].audio_pack_idref in SUPPORTED_COMMON_DEFS:
+                name = my_adm_metadata.audio_object[i].name
+                if my_adm_metadata.audio_object[i].audio_pack_idref == 'AP_00010002':
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_2_0
+                elif my_adm_metadata.audio_object[i].audio_pack_idref == 'AP_0001000a':
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_3_0
+                elif my_adm_metadata.audio_object[i].audio_pack_idref == 'AP_00010003':
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1
+                elif my_adm_metadata.audio_object[i].audio_pack_idref == 'AP_00010013':
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1_2
+                elif my_adm_metadata.audio_object[i].audio_pack_idref == 'AP_00010005':
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1_4
+                elif my_adm_metadata.audio_object[i].audio_pack_idref == 'AP_00010017':
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4
+            else:
+                # Unsupported bed, find out how many channels it has and make do
+                chan_count = len(my_adm_metadata.audio_object[i].audio_track_idref)
+                name = my_adm_metadata.audio_object[i].name + ' (unsupported ' + str(chan_count) + 'ch config)'
+                if chan_count == 1:
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_2_0
+                if chan_count == 5:
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1
+                elif chan_count == 8:
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1_2
+                elif chan_count == 9:
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_5_1_2
+                elif chan_count >= 14:
+                    config = LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4
+
+            # Create the bed
+            create_audio_bed(name, config,
+                             int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10), int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000,
+                             float(my_adm_metadata.audio_object[i].gain['gain_value']))
+        elif pack_object_exists is True and convert_bed is False and int(my_adm_metadata.audio_object[i].audio_pack_idref[0].type_label) == ADM_XML_INT_TYP_DS:
             # The number of audio_channel_idref entries in audio_pack can inform us of the bed configuration without looking that the speaker labels
             # in the corresponding audio_blocks. This works ok for fixed formats such as those used in the PMD editor 2, 3, 6, 8, 10, 12
             if len(my_adm_metadata.audio_object[i].audio_pack_idref[0].audio_channel_idref) == 2:
@@ -1004,14 +1001,14 @@ def populate_model_from_adm(xml_struct, mode):
             # Create the bed
             create_audio_bed(my_adm_metadata.audio_object[i].name, config,
                              int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10), int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000,
-                             float(my_adm_metadata.audio_object[i].gain))
+                             float(my_adm_metadata.audio_object[i].gain['gain_value']))
 
-        if int(my_adm_metadata.audio_object[i].audio_pack_idref[0].type_label) == ADM_XML_INT_TYP_OB:
+        elif pack_object_exists and isinstance(my_adm_metadata.audio_object[i].audio_pack_idref[0], AudioPackFormat):
             # In ADM, you can only get specifics about the nature of the essence (dialog, music, spoken subtitle etc) at the content level
             # Search all audio content buckets looking for a matching audio_object.id
             for j in range(0, len(my_adm_metadata.audio_content)):
                 for k in range(0, len(my_adm_metadata.audio_content[j].audio_object_idref)):
-                    if my_adm_metadata.audio_content[j].audio_object_idref[k].id == my_adm_metadata.audio_object[i].id:
+                    if my_adm_metadata.audio_content[j].audio_object_idref[k].id[5:] == my_adm_metadata.audio_object[i].id[5:]:
 
                         # If we are not 100% on the nature of the content then play safe with assuming GENERIC
                         if my_adm_metadata.audio_content[j].dialogue.value == ADM_NON_DIALOGUE_CONTENT_KIND:
@@ -1036,35 +1033,166 @@ def populate_model_from_adm(xml_struct, mode):
 
                         # The coordinates of the 'object' can be found in the audio_block_format entry of the associated audio_channel_format entry
                         # We only expect a single audio pack instance for each audio_object, audio_channel entry, and audio_block entry
-                        x = my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[
-                            0].audio_block.position_coord.x_or_az
-                        y = my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[
-                            0].audio_block.position_coord.y_or_el
-                        z = my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[
-                            0].audio_block.position_coord.z_or_ds
+                        # For beds that are to be converted xyz won't exist, so we preset to center front
+                        obj_name = ''
+
+                        x = 0.0
+                        y = 1.0
+                        z = 0.0
+
+                        if convert_bed:
+                            obj_name = my_adm_metadata.audio_object[i].name + ' (cnv bed)'
+                        else:
+                            if my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[0].audio_block.cartesian == CARTESIAN:
+                                x = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.x_or_az)
+                                y = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.y_or_el)
+                                z = my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                    0].audio_channel_idref[0].audio_block.position_coord.z_or_ds
+                                if z is None:
+                                    z = 0.0
+                                else:
+                                    z = float(z)
+                            else:
+                                # Convert polar to cartesian
+                                az = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.x_or_az) * 0.0174533
+                                el = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.y_or_el)
+                                ds = my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                    0].audio_channel_idref[0].audio_block.position_coord.z_or_ds
+                                if ds is None:
+                                    ds = 1.0
+                                a = Coordinate(az, el, ds)
+                                b = a.to_cart()
+
+                                x = round(b.x, 2)
+                                y = round(b.y, 2)
+                                z = round(b.z, 2)
+
+                            obj_name = my_adm_metadata.audio_object[i].name
 
                         # create_object(my_adm_metadata.audio_object[i].name, classification, False, 0.0, 0.0, 0.0, 0.0, False, False, 1, 0)
-                        create_object(my_adm_metadata.audio_object[i].name, classification, False,
-                                      float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[
-                                                0].audio_block.position_coord.x_or_az),
-                                      float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[
-                                                0].audio_block.position_coord.y_or_el),
-                                      float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[
-                                                0].audio_block.position_coord.z_or_ds),
-                                      0.0, False, False, int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10),
-                                      float(my_adm_metadata.audio_content[j].audio_object_idref[k].gain),
+                        create_object(obj_name, classification, False, x, y, z, 0.0, False, False,
+                                      int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10),
+                                      float(my_adm_metadata.audio_content[j].audio_object_idref[k].gain['gain_value']),
+                                      int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000)
+
+        elif (convert_bed and pack_object_exists is False) and isinstance(my_adm_metadata.audio_object[i].audio_pack_idref, str):
+                #int(my_adm_metadata.audio_object[i].audio_pack_idref[0].type_label) == ADM_XML_INT_TYP_OB or convert_bed is True:
+            # In ADM, you can only get specifics about the nature of the essence (dialog, music, spoken subtitle etc) at the content level
+            # Search all audio content buckets looking for a matching audio_object.id
+            for j in range(0, len(my_adm_metadata.audio_content)):
+                for k in range(0, len(my_adm_metadata.audio_content[j].audio_object_idref)):
+                    if my_adm_metadata.audio_content[j].audio_object_idref[k].id[5:] == my_adm_metadata.audio_object[i].id[5:]:
+
+                        # If we are not 100% on the nature of the content then play safe with assuming GENERIC
+                        if my_adm_metadata.audio_content[j].dialogue.value == ADM_NON_DIALOGUE_CONTENT_KIND:
+                            classification = GENERIC
+                        elif my_adm_metadata.audio_content[j].dialogue.value == ADM_DIALOGUE_CONTENT_KIND:
+                            if my_adm_metadata.audio_content[j].dialogue.content_kind.classification == ADM_DIALOGUE_CONTENT_KIND_UNDEFINED:
+                                classification = GENERIC
+                            elif my_adm_metadata.audio_content[j].dialogue.content_kind.classification == ADM_DIALOGUE_CONTENT_KIND_DIALOGUE:
+                                classification = DIALOGUE
+                            elif my_adm_metadata.audio_content[j].dialogue.content_kind.classification == ADM_DIALOGUE_CONTENT_KIND_VOICEOVER:
+                                classification = VOICEOVER
+                            elif my_adm_metadata.audio_content[j].dialogue.content_kind.classification == ADM_DIALOGUE_CONTENT_KIND_SPOKEN_SUBTITLE:
+                                classification = SPOKEN_SUBTITLE
+                            elif my_adm_metadata.audio_content[j].dialogue.content_kind.classification == ADM_DIALOGUE_CONTENT_KIND_AUDIO_DESCRIPTION:
+                                classification = VDS
+                            elif my_adm_metadata.audio_content[j].dialogue.content_kind.classification == ADM_DIALOGUE_CONTENT_KIND_COMMENTARY:
+                                classification = DIALOGUE
+                            elif my_adm_metadata.audio_content[j].dialogue.content_kind.classification == ADM_DIALOGUE_CONTENT_KIND_EMERGENCY:
+                                classification = EMERGENCY_ALERT
+                        elif my_adm_metadata.audio_content[j].dialogue.value == ADM_MIXED_CONTENT_KIND:
+                            classification = GENERIC
+
+                        # The coordinates of the 'object' can be found in the audio_block_format entry of the associated audio_channel_format entry
+                        # We only expect a single audio pack instance for each audio_object, audio_channel entry, and audio_block entry
+                        # For beds that are to be converted xyz won't exist, so we preset to center front
+                        obj_name = ''
+
+                        x = 0.0
+                        y = 1.0
+                        z = 0.0
+
+                        if convert_bed:
+                            obj_name = my_adm_metadata.audio_object[i].name + ' (cnv bed)'
+                        else:
+                            if my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[0].audio_channel_idref[0].audio_block.cartesian == CARTESIAN:
+                                x = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.x_or_az)
+                                y = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.y_or_el)
+                                z = my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                    0].audio_channel_idref[0].audio_block.position_coord.z_or_ds
+                                if z is None:
+                                    z = 0.0
+                                else:
+                                    z = float(z)
+                            else:
+                                # Convert polar to cartesian
+                                az = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.x_or_az) * 0.0174533
+                                el = float(my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                              0].audio_channel_idref[0].audio_block.position_coord.y_or_el)
+                                ds = my_adm_metadata.audio_content[j].audio_object_idref[k].audio_pack_idref[
+                                    0].audio_channel_idref[0].audio_block.position_coord.z_or_ds
+                                if ds is None:
+                                    ds = 1.0
+                                a = Coordinate(az, el, ds)
+                                b = a.to_cart()
+
+                                x = round(b.x, 2)
+                                y = round(b.y, 2)
+                                z = round(b.z, 2)
+
+                            obj_name = my_adm_metadata.audio_object[i].name
+
+                        # create_object(my_adm_metadata.audio_object[i].name, classification, False, 0.0, 0.0, 0.0, 0.0, False, False, 1, 0)
+                        create_object(obj_name, classification, False, x, y, z, 0.0, False, False,
+                                      int(my_adm_metadata.audio_object[i].audio_track_idref[0].track_id, 10),
+                                      float(my_adm_metadata.audio_content[j].audio_object_idref[k].gain['gain_value']),
                                       int(my_adm_metadata.audio_object[i].id[3:], 16) - 0x1000)
 
     # Create audio presentations out of audio_programme and audio_content pieces
+    # TODO this where we unroll into internal model
+
+    list = []
+    complementary_objects = []
+    label_list = []
+    id_list = []
+
     for i in range(0, len(my_adm_metadata.audio_programme)):
-        list = []
         max_chan = 0
         name = my_adm_metadata.audio_programme[i].name
 
-        # Get id's of beds and objects
-        for j in range(0, len(my_adm_metadata.audio_programme[i].audio_content_idref)):
-            # Expect there to only be a single entry for audio_object_idref in each audioContent element
-            list.append(int(my_adm_metadata.audio_programme[i].audio_content_idref[j].audio_object_idref[0].id[3:], 16) - 0x1000)
+        # Does the programme need to be unrolled
+        if my_adm_metadata.audio_programme[i].needs_unrolling:
+            # Find object that needs to be unrolled
+            for j in range(0, len(my_adm_metadata.audio_programme[i].audio_content_idref)):
+                a = len(my_adm_metadata.audio_programme[i].audio_content_idref[j].
+                               audio_object_idref[0].audio_complementary_object_idref)
+                if a > 0:
+                    # Add complementary group leader
+                    complementary_objects.append(int(my_adm_metadata.audio_programme[i].audio_content_idref[j].
+                                                 audio_object_idref[0].id[3:], 16) - 0x1000)
+                    for k in range(0, a):
+                        complementary_objects.append(int(my_adm_metadata.audio_programme[i].audio_content_idref[j].
+                                                         audio_object_idref[0].audio_complementary_object_idref[k].
+                                                         id[3:], 16) - 0x1000)
+
+            # Add the id of the bed (it will be the id that is missing)
+            for j in range(0, len(my_adm_metadata.audio_programme[i].audio_content_idref)):
+                a = int(my_adm_metadata.audio_programme[i].audio_content_idref[j].audio_object_idref[0].id[3:], 16) - 0x1000
+                if a not in complementary_objects:
+                    list.append(a)
+        else:
+            # Get id's of beds and objects
+            for j in range(0, len(my_adm_metadata.audio_programme[i].audio_content_idref)):
+                # Expect there to only be a single entry for audio_object_idref in each audioContent element
+                list.append(int(my_adm_metadata.audio_programme[i].audio_content_idref[j].audio_object_idref[0].id[3:], 16) - 0x1000)
 
         # Find biggest bed size in programme to set presentation config
         for j in range(0, len(list)):
@@ -1091,26 +1219,132 @@ def populate_model_from_adm(xml_struct, mode):
                 config = LOUDSPEAKER_CONFIG_COMMON_USE_7_1_4
 
         # Create presentation
-        create_audio_presentation("P" + str(i), my_adm_metadata.audio_programme[i].language, config, list,
-                                  int(my_adm_metadata.audio_programme[i].id[4:], 16) - 0x1000)
+        if len(complementary_objects) == 0:
+            create_audio_presentation("P" + str(i), my_adm_metadata.audio_programme[i].language, config, list,
+                                      int(my_adm_metadata.audio_programme[i].id[4:], 16) - 0x1000)
+            list.clear()
+            for j in range(0, len(my_adm_metadata.audio_programme[i].audio_programme_label)):
+                list.append(my_adm_metadata.audio_programme[i].audio_programme_label[j].name)
+                list.append(my_adm_metadata.audio_programme[i].audio_programme_label[j].language)
 
-        del list[:]
-        for j in range(0, len(my_adm_metadata.audio_programme[i].audio_programme_label)):
-            list.append(my_adm_metadata.audio_programme[i].audio_programme_label[j].name)
-            list.append(my_adm_metadata.audio_programme[i].audio_programme_label[j].language)
+            add_audio_presentation_names_by_name(find_list_reference_by_name(audio_presentation_list, 'P' + str(i)), list)
+        else:
 
-        add_audio_presentation_names_by_name(find_list_reference_by_name(audio_presentation_list, 'P' + str(i)), list)
+            for j in range(0, len(my_adm_metadata.audio_programme[i].audio_programme_label)):
+                label_list.append(my_adm_metadata.audio_programme[i].audio_programme_label[j].name)
+                label_list.append(my_adm_metadata.audio_programme[i].audio_programme_label[j].language)
+
+            for j in range(0, len(complementary_objects)):
+                id_list.clear()
+                id_list.append(list[0])
+                id_list.append(complementary_objects[j])
+                new_id = int(my_adm_metadata.audio_programme[i].id[4:], 16) - 0x1000
+                new_id = new_id * 10
+                new_id = new_id + j
+                create_audio_presentation("P" + str(j), my_adm_metadata.audio_programme[i].language, config, id_list, new_id)
+                add_audio_presentation_names_by_name(find_list_reference_by_name(audio_presentation_list, 'P' + str(j)), label_list)
+
+    # Append presentation names that reference alternative value set derived elements
+    for i in range(0, len(my_adm_metadata.audio_programme)):
+        if len(my_adm_metadata.audio_programme[i].alternative_value_set_idref) > 0:
+            for j in range(0, len(audio_presentation_list)):
+                if audio_presentation_list[j].id == int(my_adm_metadata.audio_programme[i].id[4:], 16) - 0x1000:
+                    b = audio_presentation_list[j].name
+                    for k in range (0, len(my_adm_metadata.audio_programme[i].alternative_value_set_idref)):
+                        b = b + ':' + my_adm_metadata.audio_programme[i].alternative_value_set_idref[k]
+                    audio_presentation_list[j].name = b
+
+    # Go through the appended presentation list, note presentations/elements that need removing
+    element_ids_to_remove = []
+    for i in range(0, len(audio_presentation_list)):
+        a = 0
+        b = []
+        while True:
+            a = audio_presentation_list[i].name.find(AVSD, a)
+            if a == -1:
+                break
+            b.append(a)
+            a += len(AVSD)
+
+        for j in range(0, len(b)):
+            # Get id of original element from appended name
+            c = int(audio_presentation_list[i].name[b[j] + 6:b[j] + 8])
+            element_ids_to_remove.append({APID: audio_presentation_list[i].id, EITR: c})
+
+    element_ids_to_add = []
+    # Go through the appended presentation list, note presentations/elements that need adding
+    for i in range(0, len(audio_presentation_list)):
+        a = 0
+        b = []
+        while True:
+            a = audio_presentation_list[i].name.find(AVSD, a)
+            if a == -1:
+                break
+            b.append(audio_presentation_list[i].name[a:a + 13])
+            a += len(AVSD)
+
+        for j in range(0, len(b)):
+            for k in range(0,len(audio_element_list)):
+                if b[j] in audio_element_list[k].name:
+                    element_ids_to_add.append({APID: audio_presentation_list[i].id,
+                                               EITA: audio_element_list[k].id})
+
+    # Remove elements from presentation elements list
+    for i in range(0, len(element_ids_to_remove)):
+        for j in range(0, len(audio_presentation_list)):
+            if element_ids_to_remove[i][APID] == audio_presentation_list[j].id:
+                for k in range(0, len(audio_presentation_list[j].elements)):
+                    if element_ids_to_remove[i][EITR] == audio_presentation_list[j].elements[k].id:
+                        del audio_presentation_list[j].elements[k]
+                        break
+
+    # Add elements to presentation elements list
+    for i in range(0, len(element_ids_to_add)):
+        for j in range(0, len(audio_presentation_list)):
+            if element_ids_to_add[i][APID] == audio_presentation_list[j].id:
+                # Search element list for reference
+                for k in range(0, len(audio_element_list)):
+                    if element_ids_to_add[i][EITA] == audio_element_list[k].id:
+                        audio_presentation_list[j].elements.append(audio_element_list[k])
+
+    # Update any AVS created objects with the correct gain
+    for i in range(0,len(audio_element_list)):
+        if isinstance(audio_element_list[i], AudioObject):
+            if AVSD in audio_element_list[i].name:
+                for j in range(0,len(my_adm_metadata.audio_object)):
+                    if audio_element_list[i].name == my_adm_metadata.audio_object[j].name:
+                        audio_element_list[i].source_gain_db = float(my_adm_metadata.audio_object[j].gain['gain_value'])
+
+    # Update any AVS created objects with the correct positional offset
+    for i in range(0,len(audio_element_list)):
+        if isinstance(audio_element_list[i], AudioObject):
+            if AVSD in audio_element_list[i].name:
+                for j in range(0,len(my_adm_metadata.audio_object)):
+                    if audio_element_list[i].name == my_adm_metadata.audio_object[j].name:
+                        audio_element_list[i].azimuth_or_x = float(my_adm_metadata.audio_object[j].
+                                                                   audio_pack_idref[0].audio_channel_idref[0].
+                                                                   audio_block.position_coord.x_or_az)
+
+    del complementary_objects[:]
+    del label_list[:]
+    del id_list[:]
+    del list[:]
+    del new_avs_objects[:]
+    del element_ids_to_remove[:]
+    del element_ids_to_add[:]
 
     # Lastly, create an IaT entry
     add_iat(str(uuid.uuid4()), 12345678)
 
     # Package all the data together into a professional metadata container
+
     k = ProfessionalMetadata(PMD_XML_ROOT_SE_PMD_AT_VER_VAL)
     k.audio_signals = audio_signal_list
     k.audio_elements = audio_element_list
     k.audio_presentations = audio_presentation_list
     k.iat = iat_list
-    return k
+    return MetadataContainer(k, my_adm_metadata.composition_details)
+    #return k #, my_adm_metadata.composition_details
 
 # ************************************************************************************************************************************************************ #
 # Create the PMD model of content
@@ -1142,8 +1376,13 @@ if __name__ == "__main__":
 
         startsecs = time.time()
 
-        for i in range(0, args.loop):
-            a = 0
+        #with open('complimentary_objects_v2.xml', "r") as xmlFile:
+            #xmlText = xmlFile.read()
+
+        #for i in range(0, 2000):
+            #me = populate_model_from_adm(xmlText, 1)
+
+        for i in range(0, 2):
             me = populate_model_from_adm(args.sadm, PMD_XML_MODE_FILE)
 
         endsecs = time.time()

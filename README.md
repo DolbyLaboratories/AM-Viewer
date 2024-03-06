@@ -3,7 +3,7 @@
 
 ## Overview
 
-This is a python based realtime viewer for Serial ADM carried over SMPTE ST 2110-31 and -41. It also supports display of PMD (RDD 49) over ST 2110-31.
+This is a python based realtime viewer for Serialized ADM insde a SMPTE ST 2110 container. Two flavours of SMPTE ST 2110 are supported: SMPTE ST 2110-31 and -41. The is designed to view the Serialized ADM metadata produced by PMD Studio available at https://github.com/DolbyLaboratories/pmd_tool.
 Once running the viewer can detect real-time changes in the metadata and display them in real-time. The purpose of the viewer is to be able to demonstrate the real-time capabilities of the various formats by allowing the dynamic behaviour to be viewed. The viewer also supports static display of the underlying XML representation.
 
 The User interface has three main sections:
@@ -25,9 +25,7 @@ MacOS, Windows and Linux supported.
 Python 3 (Tested with Python v3.8.1 from python.org)
 
 Python Modules (install using PIP)
-scapy, zeroconf, netifaces
-
-Note: Scapy v2.4.1 and v2.4.2 has a bug that affects Windows. Windows users should revert to 2.4.0 or use 2.4.3 or later when available.
+scapy (2.5.0 or later), zeroconf (0.26.3 or earlier),
 
 ## Windows Requirements
 
@@ -35,8 +33,7 @@ NPcap (https://nmap.org/npcap/)
 
 ## Mac OS Requirements
 
-See https://scapy.readthedocs.io/en/latest/installation.html
-Use python from python.org, not Homebrew.
+May require the use of the "-libpcap" switch. If using homebrew then Tkinter must be install via `brew install python-tk`
 
 ## Linux Requirements
 
@@ -80,7 +77,9 @@ The stream mode is used then a list of interfaces and a list of available servic
 
 When receiving a stream the 'XML' can be pressed at anytime to yield a static XMl snapshot. The XML tree can be explored by expand the various levels of the tree in the XML viewer windows.
 
-Several indicators on the bottom bar show status. The Serial ADM indicator will be green when receiving Serial ADM in any container and grey when not. If an error is received the PMD indicator will flash or stay red for continuous errors. The bit depth and container indicators work in the same way. The subframe-mode / frame mode indicators indicate whether the received stream is using the frame mode or subframe mode of the SMPTE ST 337 container format inside the SMPTE 2110-31 stream. This indicator is not applicable for SMPTE ST 2110-41 streams which do not use SMPTE frames.
+Several indicators on the bottom bar show status. The PMD indicator will be green when receiving PMD and grey when not. If an error is received the PMD indicator will flash or stay red for continuous errors. The SADM and AES-X242 indicators work in the same way. The subframe-mode / frame mode indicators indicate whether the received stream is using the frame mode or subframe mode of the SMPTE ST 337 container format inside the SMPTE 2110-31 stream. This indicator is not applicable for AES-X242 streams which do not use SMPTE frames.
+
+If receiving the 
 
 ## Known Limitations
 
@@ -92,7 +91,7 @@ When playing back presentations that include VDS (Audio Description) dialogue ob
 ## License
 
  AM Viewer
- Copyright (c) 2022, Dolby Laboratories Inc.
+ Copyright (c) 2024, Dolby Laboratories Inc.
  All rights reserved.
  
  Redistribution and use in source and binary forms, with or without modification, are permitted

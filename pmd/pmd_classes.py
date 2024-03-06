@@ -50,6 +50,14 @@ OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # ************************************************************************************************************************************************************ #
 # ************************************************************************************************************************************************************ #
+from typing import List, Iterable
+import math
+
+
+class MetadataContainer():
+    def __init__(self, audio_model, adm_info):
+        self.audio_model = audio_model
+        self.adm_info = adm_info
 
 
 class ProfessionalMetadata(object):
@@ -178,6 +186,146 @@ class IaT(object):
     def __init__(self, content_uuid, time_stamp):
         self.content_uuid = content_uuid
         self.time_stamp = time_stamp
+
+
+class CartCoordinate(List):
+    def __init__(self, x=0.0, y=0.0, z=0.0):
+        super(CartCoordinate, self).__init__([x, y, z])
+
+    @property
+    def x(self):
+        return self[0]
+
+    @property
+    def y(self):
+        return self[1]
+
+    @property
+    def z(self):
+        return self[2]
+
+    @x.setter
+    def x(self, new_x):
+        self[0] = new_x
+
+    @y.setter
+    def y(self, new_y):
+        self[1] = new_y
+
+    @z.setter
+    def z(self, new_z):
+        self[2] = new_z
+
+    def rotate_around_x(self, deg: float):
+        r = math.sqrt(pow(self.y, 2) + pow(self.z, 2))
+        if self.y == 0:
+            theta = (math.pi/2 if self.z > 0 else 3*math.pi/2) + deg
+        else:
+            theta = math.atan(self.z/self.y) + deg
+            if self.y < 0:
+                theta = (theta + math.pi) % (2*math.pi)
+        self.z = r*math.sin(theta)
+        self.y = r*math.cos(theta)
+
+    def rotate_around_z(self, deg: float):
+        r = math.sqrt(pow(self.x, 2) + pow(self.y, 2))
+
+        if self.y == 0:
+            theta = (math.pi/2 if self.x > 0 else 3*math.pi/2) + deg
+        else:
+            theta = math.atan(self.x/self.y) + deg
+            if self.y < 0:
+                theta = (theta + math.pi) % (2*math.pi)
+        self.y = r*math.cos(theta)
+        self.x = r*math.sin(theta)
+
+    def __mul__(self, other):
+        if not issubclass(type(other), Iterable):
+            self.x *= other
+            self.y *= other
+            self.z *= other
+        else:
+            self.x *= other[0]
+            self.y *= other[1]
+            self.z *= other[2]
+
+    def to_atmos_cart(self):
+        to_ret = CartCoordinate((self.x + 1)/2, (self.y + 1)/2, (self.z + 1)/2)
+
+        to_ret.x = min(1.0, to_ret.x)
+        to_ret.x = max(0.0, to_ret.x)
+        to_ret.y = min(1.0, to_ret.y)
+        to_ret.y = max(0.0, to_ret.y)
+        to_ret.z = min(1.0, to_ret.z)
+        to_ret.z = max(0.0, to_ret.z)
+
+        return to_ret
+
+
+class Coordinate(List):
+    def __init__(self, az=0.0, el=0.0, r=0.0):
+        super(Coordinate, self).__init__([az, el, r])
+
+    def pretty(self, deg=True):
+        m = 360/(2*math.pi) if deg else 1
+        return f'az={self.az*m:+.01f}, el={self.el*m:+.01f}, r={self.r:.02f}'
+
+    @property
+    def az(self):
+        return self[0]
+
+    @property
+    def el(self):
+        return self[1]
+
+    @property
+    def r(self):
+        return self[2]
+
+    @az.setter
+    def az(self, new_az):
+        self[0] = new_az % (2*math.pi)
+
+    @el.setter
+    def el(self, new_el):
+        self[1] = new_el % (2*math.pi)
+
+    @r.setter
+    def r(self, new_r):
+        self[2] = new_r
+
+    def to_cart(self):
+        t1 = self.r * math.cos(self.el)
+        return CartCoordinate(t1 * math.sin(self.az), t1 * math.cos(self.az), self.r * math.sin(self.el))
+
+    def _update_from_cart(self, x, y, z):
+        psquared = pow(x, 2) + pow(y, 2) + pow(z, 2)
+        self.r = math.sqrt(psquared)
+        self.az = math.atan(x/y) if y != 0 else math.pi/2 if x > 0 else 3*math.pi/2
+        if y < 0:
+            self.az = (self.az + math.pi) % (2*math.pi)
+        self.el = math.asin(z/self.r) if self.r != 0 else 0
+
+    @classmethod
+    def from_cart(cls, c: CartCoordinate):
+        to_ret = cls()
+        to_ret._update_from_cart(c.x, c.y, c.z)
+        return to_ret
+
+    def __add__(self, other):
+        c1 = self.to_cart()
+        c2 = other.to_cart()
+        self._update_from_cart(c1[0] + c2[0], c1[1] + c2[1], c1[2] + c2[2])
+
+    def __mul__(self, other):
+        if not issubclass(type(other), Iterable):
+            self.az *= other
+            self.el *= other
+            self.r *= other
+        else:
+            self.az *= other[0]
+            self.el *= other[1]
+            self.r *= other[2]
 
 # ************************************************************************************************************************************************************ #
 # ************************************************************************************************************************************************************ #

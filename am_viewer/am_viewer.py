@@ -27,6 +27,8 @@
 
 
 from tkinter import *
+from tkinter.filedialog import SaveFileDialog, asksaveasfile
+from tkinter import messagebox
 import time
 import random
 import threading
@@ -38,7 +40,6 @@ import traceback
 import subprocess
 import binascii
 import zlib
-import netifaces
 import scapy.all as scapy
 import argparse
 import queue
@@ -70,8 +71,9 @@ from am_viewer.am_xml_viewer import isFilePmd
 from am_viewer.am_xml_viewer import isFileSADM
 import aoip_services.aoip_discovery
 import aoip_services.multicast
+from scapy.all import conf
 
-__version__ = "3.13"
+__version__ = "4.0.2"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -879,6 +881,7 @@ class PmdAdmDisplayGUI:
     selectedService = None
     audioService = None
     XMLViewerRequest = False
+    XMLSaveRequest = False
     discoveryService = None
     start_time = 0
     debug = False
@@ -1067,6 +1070,24 @@ class PmdAdmDisplayGUI:
 
         self.indicators = self.Indicators(self, self.indFrame)
 
+        self.infoFrame = Frame(master, relief= self.frameRelief, borderwidth=self.frameBorderwidth)
+        self.infoFrame.pack(fill=X)
+
+        sadm_version_label = Label(self.infoFrame, text="S-ADM Version")
+        sadm_version_label.pack(side=LEFT)
+        self.sadmVersion = Label(self.infoFrame, text="          ", relief=SUNKEN, bg='#B3B4C8')
+        self.sadmVersion.pack(side=LEFT)
+
+        adm_version_label = Label(self.infoFrame, text="ADM Version")
+        adm_version_label.pack(side=LEFT)
+        self.admVersion = Label(self.infoFrame, text="           ", relief=SUNKEN, bg='#B3B4C8')
+        self.admVersion.pack(side=LEFT)
+
+        adm_profile_label = Label(self.infoFrame, text="ADM Profile")
+        adm_profile_label.pack(side=LEFT)
+        self.admProfile = Label(self.infoFrame, text="           ", relief=SUNKEN, bg='#B3B4C8')
+        self.admProfile.pack(side=LEFT)
+
         audio_beds_label = Label(master, text="Audio Beds")
         audio_beds_label.pack(fill=X)
 
@@ -1181,7 +1202,9 @@ class PmdAdmDisplayGUI:
                     return
             elif isFileSADM(xml_file):
                 try:
-                    self.model = populate_model_from_adm(xml_file, ADM_XML_MODE_FILE)
+                    a = populate_model_from_adm(xml_file, ADM_XML_MODE_FILE)
+                    self.model = a.audio_model
+                    self.update_adm_info(a.adm_info)
                 except:
                     if self.debug:
                         traceback.print_exc(file=sys.stdout)
@@ -1193,12 +1216,12 @@ class PmdAdmDisplayGUI:
                     self.quit()
                     return               
             self.updateFromModel(self.model)
+
         else:
             # Create Drop down for IP Interfaces
             if platform.system() == 'Windows':
                 fullIfListNames = [x['name'] for x in scapy.get_windows_if_list()]
                 fullIfListGuids = [x['guid'] for x in scapy.get_windows_if_list()]
-#				#full_ifList = netifaces.interfaces()
             else:
                 fullIfListNames = scapy.get_if_list()
 
@@ -1208,12 +1231,11 @@ class PmdAdmDisplayGUI:
             if platform.system() == 'Windows':
                 for iface in range(0,len(fullIfListNames)):
                     name = fullIfListNames[iface]
-                    guid = fullIfListGuids[iface]
-                    if netifaces.ifaddresses(guid).get(netifaces.AF_INET) != None and ("Loopback" not in name):
+                    if scapy.get_if_addr(name) != "0.0.0.0" and ("Loopback" not in name):
                         ifList.append(name)
             else:
                 for iface in fullIfListNames:
-                    if netifaces.ifaddresses(iface).get(netifaces.AF_INET) != None and iface != 'lo0' and iface != 'lo':
+                    if scapy.get_if_addr(iface) != "0.0.0.0" and iface != 'lo0' and iface != 'lo':
                         ifList.append(iface)
 
             # Now we have a list of interfaces, create Drop-down menu to select interface
@@ -1236,8 +1258,10 @@ class PmdAdmDisplayGUI:
         self.audioMenu = OptionMenu(master, self.audioSelection, "Audio")
         self.audioMenu.pack(side=LEFT)
 
-        button = Button(master, text="XML", command=self.view_XML)
+        button = Button(master, text="View XML", command=self.view_XML)
+        button2 = Button(master, text="Save XML", command=self.save_XML)
         button.pack(side=LEFT)
+        button2.pack(side=LEFT)
 
         # Now that the GUI is complete it is safe to start discovery
         # Option menu must exist first so this can't be moved up
@@ -1255,15 +1279,23 @@ class PmdAdmDisplayGUI:
             self.multicast = aoip_services.multicast.MulticastGroup()
 
         try:
-        	shellState = (platform.system() == "Windows")
-        	self.haveGstreamer = ((subprocess.call(["gst-launch-1.0", "--version"], shell=shellState, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)) == 0)
+            shellState = (platform.system() == "Windows")
+            self.haveGstreamer = ((subprocess.call(["gst-launch-1.0", "--version"], shell=shellState, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)) == 0)
         except OSError as e:
-        	if e.errno == errno.ENOENT:
-        		self.haveGstreamer = False
-        	else:
-        		# Something else went wrong while trying to check for gstreamer
-        		raise
-        		self.haveGstreamer = False
+            if e.errno == errno.ENOENT:
+                self.haveGstreamer = False
+            else:
+                # Something else went wrong while trying to check for gstreamer
+                raise
+                self.haveGstreamer = False
+
+    def update_adm_info(self, adm_info):
+        self.sadmVersion.configure(text=adm_info["sadm_version"])
+        self.admVersion.configure(text=adm_info["adm_version"])
+        if (adm_info["sadm_advss_profile"]):
+            self.admProfile.configure(text="ITU-R AdvSS")
+        else:
+            self.admProfile.configure(text="Unknown")
 
     def post(self, command, data):
         # If the packet processor is running faster than the UI background task
@@ -1502,6 +1534,12 @@ class PmdAdmDisplayGUI:
         self.audioPipeLine = None
 
     def reset_ui(self):
+
+        # Reset Text fields
+        self.sadmVersion.configure(text="          ")
+        self.admVersion.configure(text="           ")
+        self.admProfile.configure(text="           ")
+
         # Reset lights
         self.indicators.reset()
 
@@ -1584,6 +1622,9 @@ class PmdAdmDisplayGUI:
 
     def view_XML(self):
         self.XMLViewerRequest = True
+    
+    def save_XML(self):
+        self.XMLSaveRequest = True
 
     def updateFromModel(self, model):
         objectCount = 0
@@ -1670,6 +1711,10 @@ class PmdAdmDisplayGUI:
             for i in range(0, self.numObjects):
                 self.oeVars[unusedPresentations][i].set(0)
 
+    def updateFromAdmModel(self, admModelObject):
+        self.updateFromModel(admModelObject.audio_model)
+        self.update_adm_info(admModelObject.adm_info)
+
     def processNextMessage(self, master):
         if self.messageWaiting():
             [command,messageData] = self.getMessage()
@@ -1702,7 +1747,10 @@ class PmdAdmDisplayGUI:
                 self.reset_ui()
             if command == "quit":
                 master.quit()
-                master.destroy()
+                try:
+                    master.destroy()
+                except TclError:
+                    pass
                 # Signal to main loop to quit
                 return False
             if command == "PMD XML":
@@ -1715,8 +1763,21 @@ class PmdAdmDisplayGUI:
                 XMLWindow.geometry("1500x1000")
                 XML_Viewer(XMLWindow, messageData, heading_text=" Audio Metadata Viewer  ").pack()
                 self.XMLViewerRequest = False
+            if command == "SAVE XML":
+                # filepath = SaveFileDialog(master, "Save XML...")
+                fp = asksaveasfile("wb", defaultextension=".xml", initialfile="am_viewer_output.xml")
+                if fp is not None:
+                    try:
+                        nbytes = fp.write(messageData)
+                        messagebox.showinfo("Success", f"Wrote {nbytes} bytes")
+                    except Exception as e:
+                        messagebox.showerror("Error - failed to save", str(e))
+                        print(e.with_traceback(), file=sys.stderr)
             if command == "updateModel":
                 self.updateFromModel(messageData)
+                self.lastModelUpdateTime = time.time()
+            if command == "updateAdmModel":
+                self.updateFromAdmModel(messageData)
                 self.lastModelUpdateTime = time.time()
             if command == "updateInd":
                 self.indicators.update()
@@ -1784,13 +1845,14 @@ class PmdAdmDisplayGUI:
                                         raise RuntimeError("Unknown SADM format")
                                     if xmlText is not None:
                                         try:
-                                            self.model = populate_model_from_adm(xmlText, ADM_XML_MODE_STRING)
+                                            xmlTextStr = xmlText.decode("utf-8")
+                                            a = populate_model_from_adm(xmlText, ADM_XML_MODE_STRING)
                                         except:
                                             self.indicators.sadmError()
                                             if self.debug:
                                                 traceback.print_exc(file=sys.stdout)
                                             raise RuntimeError("SADM XML parsing failed")
-                                        self.post("updateModel", copy.deepcopy(self.model))
+                                        self.post("updateAdmModel", copy.deepcopy(a))
                                         self.indicators.sadmOn()
                                     else:
                                         self.indicators.sadmError()
@@ -1819,6 +1881,14 @@ class PmdAdmDisplayGUI:
                                     else:
                                         self.post("ADM XML", xmlText)
                                     self.XMLViewerRequest = False
+                                elif self.XMLSaveRequest:
+                                    if newFrame.is_pmd():
+                                        with open("pmd.xml", "r") as xmlFile:
+                                            xmlText = xmlFile.read()
+                                        self.post("SAVE XML", xmlText)
+                                    else:
+                                        self.post("SAVE XML", xmlText)
+                                    self.XMLSaveRequest = False
 
 
                             except RuntimeError as e:
@@ -1844,10 +1914,11 @@ class PmdAdmDisplayGUI:
 # If not then the UI starts empty and waits for control input with the UI gadgets
 
 def main():
-    parser = argparse.ArgumentParser(description='Audio Metadata (AM) realtime viewer application')
+    parser = argparse.ArgumentParser(description='Audio Metadata (AM) realtime viewer application ' + __version__)
     parser.add_argument('-xml', type=argparse.FileType('r'), default=None, help='XML filename for offline display of XML')
     parser.add_argument('-sdp', type=argparse.FileType('r'), default=None, help='SDP filename to avoid requiring stream discovery')
     parser.add_argument('-debug', action='store_const', const=True, help='Enables debug mode')
+    parser.add_argument('-libpcap', action='store_const', const=True, help='Uses libpcap')
     args = parser.parse_args()
 
     if args.debug:
@@ -1862,7 +1933,11 @@ def main():
     root.tk_setPalette(background='#A3A4C8', foreground='black',
                    activeBackground='#A3A4C8', activeForeground='black')
 
+    if (args.libpcap):
+        conf.use_pcap = True
+
     my_gui = PmdAdmDisplayGUI(root, args.xml, args.sdp, args.debug)
+    root.protocol('WM_DELETE_WINDOW', my_gui.quit)
 
     if my_gui.exitCode == my_gui.ErrorCodes.ERR_OK:
         root.update()

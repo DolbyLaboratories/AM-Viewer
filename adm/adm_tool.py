@@ -144,14 +144,17 @@ from adm.adm_const import ADM_XML_APR_ELN_SE_DG_AT_ND, ADM_XML_APR_ELN_SE_DG_AT_
 
 from adm.adm_const import ADM_XML_INDENT, PMD_XML_MODE_FILE, PMD_XML_MODE_STRING
 
-from adm.adm_const import SADM_XML_TTF_ELN_SE_AT_SE_AR, SADM_XML_TTF_ELN_SE_AT_AT_TI, SADM_XML_FH, SADM_XML_TTF_ELN , SADM_XML_TTF_ELN_SE_AT
+from adm.adm_const import SADM_XML_TTF_ELN_SE_AT_SE_AR, SADM_XML_TTF_ELN_SE_AT_AT_TI, SADM_XML_FH, SADM_XML_TTF_ELN
+from adm.adm_const import SADM_XML_TTF_ELN_SE_AT, SADM_XML_FRM_AT_VER, SADM_XML_FRM_AT_VER_OV, ADM_XML_FRM_AT_VER_OV
+from adm.adm_const import ADVSS_PROFILE_NAME, TARGET_ADM_VER, TARGET_SADM_VER, ADM_XML_APR_ELN_SE_AV, ADM_XML_AOB_ELN_SE_CO
+from adm.adm_const import ADM_XML_AOB_ELN_SE_AV
 
 # Classes ******************************************************************************************************************************************************
 from adm.adm_classes import AudioProgramme, AudioContent, AudioObject, AudioBlockFormat, AudioPackFormat, AudioProgrammeLabel
 from adm.adm_classes import AudioChannelFormat, AudioTrackFormat, AudioTrackUID, AudioMXFLookUp, AudioStreamFormat
 from adm.adm_classes import Objects, DirectSpeakers, HeadphoneRender, LoudnessMetadata, Dialogue, NonDialogueContentKind, DialogueContentKind, MixedContentKind
 from adm.adm_classes import AudioObjectInteraction, GainInteractionRange, PositionInteractionRange, Zone, ChannelLock, JumpPosition
-from adm.adm_classes import ItemValidationData, Position, Headphone, AudioFormatExtended
+from adm.adm_classes import ItemValidationData, Position, Headphone, AudioFormatExtended, AlternativeValueSet, RolledProgramme
 
 # External system **********************************************************************************************************************************************
 import csv
@@ -182,6 +185,7 @@ audio_pack_format_list = []
 audio_block_format_list = []
 audio_track_uid_list = []
 transport_track_format_list = []
+alternative_value_set_list = []
 
 # ************************************************************************************************************************************************************ #
 # ************************************************************************************************************************************************************ #
@@ -244,6 +248,7 @@ def get_audio_content_reference(object_name):
 def parse_adm_xml(xml_struct, mode):
     global audio_programme_list, audio_content_list, audio_object_list, audio_channel_format_list
     global audio_pack_format_list, audio_block_format, audio_track_uid_list, transport_track_format_list
+    global alternative_value_set_list
 
     # Clear out model lists
     del audio_programme_list[:]
@@ -254,6 +259,7 @@ def parse_adm_xml(xml_struct, mode):
     del audio_block_format_list[:]
     del audio_track_uid_list[:]
     del transport_track_format_list[:]
+    del alternative_value_set_list[:]
 
     tree = None
 
@@ -265,6 +271,7 @@ def parse_adm_xml(xml_struct, mode):
     xml_audio_block_format_list = []
     xml_audio_track_uid_list = []
     xml_transport_track_format_list = []
+    xml_alternative_value_set_list = []
 
     # Is source a blob of XML or an XML file ?
     if mode == ADM_XML_MODE_FILE:
@@ -279,23 +286,68 @@ def parse_adm_xml(xml_struct, mode):
     # Find root of metadata, there are two variants with S-ADM, one with and one without coreMetadata in the structure
     sadm_format_root = root.find(ADM_XML_CM)
     if sadm_format_root is not None:
+
         adm_format_root = sadm_format_root.find(ADM_XML_FT)
         adm_format_extended_root = adm_format_root.find(ADM_XML_AF)
     else:
         adm_format_extended_root = root.find(ADM_XML_AF)
 
-    # Get virtual to physical track mapping info
+    sadm_version = None
+    adm_version = None
+    sadm_advss_profile = False
+    adm_advss_profile = False
+
+    # Get S-ADM version
+    if SADM_XML_FRM_AT_VER in root.attrib:
+        sadm_version = root.attrib[SADM_XML_FRM_AT_VER]
+    else:
+        sadm_version = SADM_XML_FRM_AT_VER_OV
+
     sadm_frame_header_root = root.find(SADM_XML_FH)
+    # Get profile info
     if sadm_frame_header_root is not None:
+        sadm_profile_list = sadm_frame_header_root.find('profileList')
+        if sadm_profile_list is not None:
+            sadm_profiles_list = sadm_profile_list.findall('profile')
+            if sadm_profiles_list is not None:
+                # Do we have an AdvSS emission profile entry?
+                for i in range(0, len(sadm_profiles_list)):
+                    if sadm_profiles_list[i].attrib['profileName'] == ADVSS_PROFILE_NAME:
+                        sadm_advss_profile = True
+                        break
+
+        # Get profile info and virtual to physical track mapping info
         sadm_transport_track_format = sadm_frame_header_root.find(SADM_XML_TTF_ELN)
         if sadm_transport_track_format is not None:
             xml_transport_track_format_list = sadm_transport_track_format.findall(SADM_XML_TTF_ELN_SE_AT)
 
+    # Get ADM version, see if there is profile information
     if adm_format_extended_root is not None:
+        if SADM_XML_FRM_AT_VER in adm_format_extended_root.attrib:
+            adm_version = adm_format_extended_root.attrib[SADM_XML_FRM_AT_VER]
+            if adm_version == TARGET_ADM_VER:
+                adm_profile_list = adm_format_extended_root.find('profileList')
+                if adm_profile_list is not None:
+                    adm_profiles_list = adm_profile_list.findall('profile')
+                    if adm_profiles_list is not None:
+                        adm_advss_profile = False
+                        # Do we have an AdvSS emission profile entry?
+                        for i in range(0, len(adm_profiles_list)):
+                            if adm_profiles_list[i].attrib['profileName'] == ADVSS_PROFILE_NAME:
+                                adm_advss_profile = True
+                                break
+        else:
+            adm_version = ADM_XML_FRM_AT_VER_OV
+
+        # Get list of programmes
         xml_audio_programme_list = adm_format_extended_root.findall(ADM_XML_APR_ELN)
     else:
         logging.critical('Failed to find ' + ADM_XML_APR_ELN + ' *** Aborting ***')
         return False
+
+    # Save composition details
+    composition_details = {'sadm_version': sadm_version, 'adm_version': adm_version,
+                           'sadm_advss_profile': sadm_advss_profile, 'adm_advss_profile': adm_advss_profile}
 
     # Check limits for element, abort if content is invalid
     if not get_item_limits(ADM_XML_APR_ELN, len(xml_audio_programme_list)):
@@ -324,7 +376,7 @@ def parse_adm_xml(xml_struct, mode):
             if not get_item_limits(ADM_XML_APR_ELN_SE_CR, len(k)):
                 return False
 
-            if k is not None:
+            if len(k) > 0:
                 for j in range(0, len(k)):
                     audio_programme_list[i].audio_content_idref.append(k[j].text)
             else:
@@ -337,12 +389,17 @@ def parse_adm_xml(xml_struct, mode):
             if not get_item_limits(ADM_XML_APR_ELN_SE_LM, len(k)):
                 return False
 
-            if k is not None:
+            if len(k) > 0:
                 for j in range(0, len(k)):
                     audio_programme_list[i].loudness_metadata = LoudnessMetadata()
             else:
                 logging.debug(MSG_INVALID_STUB + ADM_XML_APR_ELN_SE_LM)
 
+            # Get any alternative values sets
+            k = xml_audio_programme_list[i].findall(ADM_XML_APR_ELN_SE_AV)
+            if len(k) > 0:
+                for j in range(0, len(k)):
+                    audio_programme_list[i].alternative_value_set_idref.append(k[j].text)
     else:
         logging.debug(MSG_INVALID_STUB + ADM_XML_APR_ELN)
 
@@ -448,7 +505,7 @@ def parse_adm_xml(xml_struct, mode):
 
             if k is not None:
                 for j in range(0, len(k)):
-                    audio_object_list[i].gain = k[j].text
+                    audio_object_list[i].gain['gain_value'] = float(k[j].text)
             else:
                 logging.debug(MSG_INVALID_STUB + ADM_XML_AOB_ELN_SE_GN)
 
@@ -464,6 +521,35 @@ def parse_adm_xml(xml_struct, mode):
                     audio_object_list[i].head_locked = k[j].text
             else:
                 logging.debug(MSG_INVALID_STUB + ADM_XML_AOB_ELN_SE_HL)
+
+            # For each object get complementary objects
+            k = xml_audio_object_list[i].findall(ADM_XML_AOB_ELN_SE_CO)
+            if k is not None:
+                for j in range(0, len(k)):
+                    audio_object_list[i].audio_complementary_object_idref.append(k[j].text)
+
+            # For each object get alternative value sets, for now just gain
+            # TODO Add more alternative value parameters
+            k = xml_audio_object_list[i].findall(ADM_XML_AOB_ELN_SE_AV)
+            if k is not None:
+                for j in range(0, len(k)):
+                    audio_object_list[i].alternative_value_set.append(k[j].attrib['alternativeValueSetID'])
+                    a = k[j].find('gain')
+                    if a is not None:
+                        alternative_value_set_list.append(({'alternative_value_set_id': k[j].attrib['alternativeValueSetID'] ,
+                                                            'gain_value': a.text,
+                                                            'gain_unit': a.attrib['gainUnit']}))
+                    a = k[j].find('positionOffset')
+                    if a is not None:
+                        alternative_value_set_list.append(({'alternative_value_set_id': k[j].attrib['alternativeValueSetID'],
+                                                            'offset': a.text,
+                                                            'coordinate': a.attrib['coordinate']}))
+            # TODO audioObjectIDRef
+            k = xml_audio_object_list[i].findall('audioObjectIDRef')
+            if k is not None:
+                for l in range(0, len(k)):
+
+                    audio_object_list[i].audio_object_idref.append(k[j])
     else:
         logging.debug(MSG_INVALID_STUB + ADM_XML_AOB_ELN)
 
@@ -530,9 +616,15 @@ def parse_adm_xml(xml_struct, mode):
             if k is not None:
                 audio_block_format_list.append(AudioBlockFormat(k[0].attrib[ADM_XML_ACF_ELN_SE_AB_AT_ID]))
                 audio_block_format_list[audio_block_format_counter].position_coord = Position(False)
-                # If we are dealing with a type lable of Object then set teh cartesian flag
                 if type_label == ADM_XML_INT_TYP_OB:
-                    audio_block_format_list[audio_block_format_counter].cartesian = 1
+                    # What coordinate mode is being used
+                    a = k[0].find(ADM_XML_ACF_ELN_SE_AB_SE_CT)
+                    if a is not None:
+                        audio_block_format_list[audio_block_format_counter].cartesian = int(a.text)
+                        audio_block_format_list[audio_block_format_counter].position_coord.is_polar = False
+                    else:
+                        audio_block_format_list[audio_block_format_counter].cartesian = POLAR
+                        audio_block_format_list[audio_block_format_counter].position_coord.is_polar = True
 
                 # Get position coordinates and update
                 m = k[0].findall(ADM_XML_ACF_ELN_SE_AB_SE_PS)
@@ -542,12 +634,20 @@ def parse_adm_xml(xml_struct, mode):
                     return False
 
                 for q in range(0, len(m)):
-                    if m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_XC:
-                        audio_block_format_list[audio_block_format_counter].position_coord.x_or_az = m[q].text
-                    if m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_YC:
-                        audio_block_format_list[audio_block_format_counter].position_coord.y_or_el = m[q].text
-                    if m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_ZC:
-                        audio_block_format_list[audio_block_format_counter].position_coord.z_or_ds = m[q].text
+                    if audio_block_format_list[audio_block_format_counter].cartesian == POLAR:
+                        if m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == 'azimuth':
+                            audio_block_format_list[audio_block_format_counter].position_coord.x_or_az = m[q].text
+                        elif m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == 'elevation':
+                            audio_block_format_list[audio_block_format_counter].position_coord.y_or_el = m[q].text
+                        elif m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == 'distance':
+                            audio_block_format_list[audio_block_format_counter].position_coord.z_or_ds = m[q].text
+                    elif audio_block_format_list[audio_block_format_counter].cartesian == CARTESIAN:
+                        if m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_XC:
+                            audio_block_format_list[audio_block_format_counter].position_coord.x_or_az = m[q].text
+                        elif m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_YC:
+                            audio_block_format_list[audio_block_format_counter].position_coord.y_or_el = m[q].text
+                        elif m[q].attrib[ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_CO] == ADM_XML_ACF_ELN_SE_AB_SE_PS_AT_ZC:
+                            audio_block_format_list[audio_block_format_counter].position_coord.z_or_ds = m[q].text
 
                 # Get speaker label and update
                 m = k[0].find(ADM_XML_ACF_ELN_SE_AB_SE_SL)
@@ -612,6 +712,34 @@ def parse_adm_xml(xml_struct, mode):
     else:
         logging.debug(MSG_INVALID_STUB + ADM_XML_ACF_ELN)
 
+    # Does composition contain audio programmes that reference complementary group leaders
+    programme_has_complementary_leader = []
+
+    for i in range(0, len(audio_programme_list)):
+        for j in range(0, len(audio_programme_list[i].audio_content_idref)):
+            audio_content_idref = audio_programme_list[i].audio_content_idref[j]
+            # Get referenced audio object and see if it contains complementary object references
+            for k in range(0, len(audio_content_list)):
+                if audio_content_idref == audio_content_list[k].id:
+                    for m in range(0, len(audio_content_list[k].audio_object_idref)):
+                        audio_object_idref = audio_content_list[k].audio_object_idref[m]
+                        for n in range(0, len(audio_object_list)):
+                            if audio_object_idref == audio_object_list[n].id:
+                                a = len(audio_object_list[n].audio_complementary_object_idref)
+                                if a > 0:
+                                    programme_has_complementary_leader.\
+                                        append({'audio_programme_id': audio_programme_list[i].id,
+                                                'object_group_leader': audio_object_list[n].id})
+
+    # Get list of objects that are complementary to the group leader
+    object_group_leader_info = []
+    for i in range(0, len(programme_has_complementary_leader)):
+        for j in range(0, len(audio_object_list)):
+            if programme_has_complementary_leader[i]['object_group_leader'] == audio_object_list[j].id:
+                object_group_leader_info.append({'audio_programme_id': programme_has_complementary_leader[i]['audio_programme_id'],
+                                                'object_group_leader': audio_object_list[j].id,
+                                                'complementary_objects': audio_object_list[j].audio_complementary_object_idref})
+
     # Populate the final model
     mdl_audio_programmes = []
     mdl_audio_content = []
@@ -621,11 +749,15 @@ def parse_adm_xml(xml_struct, mode):
     mdl_audio_block_fmt = []
     mdl_audio_track_uid = []
 
+    # TODO audio pack ref in object for common defs, insert common def bed into audio channel format
     # Start populating audio programmes
     for i in range(0, len(audio_programme_list)):
         mdl_audio_programmes.append(AudioProgramme(audio_programme_list[i].name, audio_programme_list[i].language, audio_programme_list[i].id))
         mdl_audio_programmes[i].loudness_metadata = audio_programme_list[i].loudness_metadata
         mdl_audio_programmes[i].audio_programme_label = audio_programme_list[i].audio_programme_label
+        for j in range(0, len(object_group_leader_info)):
+            if mdl_audio_programmes[i].id == object_group_leader_info[j]['audio_programme_id']:
+                mdl_audio_programmes[i].needs_unrolling = True
 
     # Start populating audio content
     for i in range(0, len(audio_content_list)):
@@ -672,23 +804,37 @@ def parse_adm_xml(xml_struct, mode):
             q = xml_transport_track_format_list[j].findall(SADM_XML_TTF_ELN_SE_AT_SE_AR)
             if q is not None:
                 for k in range(0, len(q)):
-                    if q[k].text == audio_track_uid_list[i].id:
+                    if q[k].text.lower() == audio_track_uid_list[i].id.lower():
                         mdl_audio_track_uid[i].track_id = xml_transport_track_format_list[j].attrib[SADM_XML_TTF_ELN_SE_AT_AT_TI]
                         break
 
     # Update audio object with gain, audio_pack_idref, audio_track_uidref
     for i in range(0, len(mdl_audio_object)):
-        # gain
+        # Gain
         for j in range(0, len(audio_object_list)):
             if mdl_audio_object[i].id == audio_object_list[j].id:
-                mdl_audio_object[i].gain = audio_object_list[j].gain
+                mdl_audio_object[i].gain['gain_value'] = audio_object_list[j].gain['gain_value']
                 break
 
         # Audio pack
         for j in range(0, len(audio_object_list)):
             if mdl_audio_object[i].id == audio_object_list[j].id:
-                mdl_audio_object[i].audio_pack_idref.append(find_list_reference_by_id(mdl_audio_pack_fmt, audio_object_list[j].audio_pack_idref[0]))
-                break
+                # TODO Proper common definitions
+                # Is this a nested object?
+                if len(audio_object_list[j].audio_pack_idref) > 0:
+                    if int(audio_object_list[j].audio_pack_idref[0][7:8]) == 0:
+                        mdl_audio_object[i].audio_pack_idref = audio_object_list[j].audio_pack_idref[0]
+                    else:
+                        mdl_audio_object[i].audio_pack_idref.append(find_list_reference_by_id(mdl_audio_pack_fmt, audio_object_list[j].audio_pack_idref[0]))
+                    break
+
+        # Nested audio objects
+        for j in range(0, len(audio_object_list)):
+            if mdl_audio_object[i].id == audio_object_list[j].id:
+                # Is this a nested object?
+                if len(audio_object_list[j].audio_object_idref) > 0:
+                    for k in range(len(audio_object_list[j].audio_object_idref)):
+                        mdl_audio_object[i].audio_object_idref.append(audio_object_list[j].audio_object_idref[k])
 
         # Audio tracks
         for j in range(0, len(audio_object_list)):
@@ -713,9 +859,37 @@ def parse_adm_xml(xml_struct, mode):
                     z = find_list_reference_by_id(mdl_audio_content, audio_programme_list[j].audio_content_idref[k])
                     mdl_audio_programmes[i].audio_content_idref.append(z)
                 break
+    # Update audio programmes with alternative value sets
+    for i in range(0, len(mdl_audio_programmes)):
+        for j in range(0, len(audio_programme_list)):
+            if mdl_audio_programmes[i].id == audio_programme_list[j].id:
+
+                for k in range(0, len(audio_programme_list[j].alternative_value_set_idref)):
+                    mdl_audio_programmes[i].alternative_value_set_idref.append(audio_programme_list[j].alternative_value_set_idref[k])
+
+    # Update audio objects that are complimentary group leaders
+    for i in range(0, len(mdl_audio_object)):
+        for j in range(0, len(object_group_leader_info)):
+            if mdl_audio_object[i].id == object_group_leader_info[j]['object_group_leader']:
+                #mdl_audio_object[i].audio_complementary_object_idref = object_group_leader_info[j]['complementary_objects']
+                for k in range(0, len(object_group_leader_info[j]['complementary_objects'])):
+                    #b = find_list_reference_by_id(mdl_audio_object, object_group_leader_info[j]['complementary_objects'][k])
+                    if find_list_reference_by_id(mdl_audio_object, object_group_leader_info[j]['complementary_objects']
+                    [k]) not in mdl_audio_object[i].audio_complementary_object_idref:
+                        mdl_audio_object[i].audio_complementary_object_idref.append\
+                            (find_list_reference_by_id(mdl_audio_object,object_group_leader_info[j]['complementary_objects'][k]))
+
+    # Update audio objects that contain alternative value sets
+    for i in range(0, len(mdl_audio_object)):
+        for j in range(0, len(alternative_value_set_list)):
+            a = mdl_audio_object[i].id[3:]
+            b = alternative_value_set_list[j]['alternative_value_set_id'][4:8]
+            if a == b:
+                mdl_audio_object[i].alternative_value_set.append(alternative_value_set_list[j])
 
     # Package all the data together into a audio format extended container
     a = AudioFormatExtended()
+    a.composition_details = composition_details
     a.audio_programme = mdl_audio_programmes
     a.audio_content = mdl_audio_content
     a.audio_object = mdl_audio_object
@@ -724,6 +898,7 @@ def parse_adm_xml(xml_struct, mode):
     a.audio_track_uid = mdl_audio_track_uid
 
     return a
+
 
 def get_item_limits(item_name, number_found):
 
@@ -785,8 +960,11 @@ if __name__ == "__main__":
         startsecs = time.time()
         
         for i in range(0, loop_counter):
-            my_metadata = parse_adm_xml("skip_sadm.xml", ADM_XML_MODE_FILE)
-            #my_metadata = parse_adm_xml("gen.adm_+_gen.sadm.xml", ADM_XML_MODE_FILE)
+            #my_metadata = parse_adm_xml("skip.sadm.advss.xml", ADM_XML_MODE_FILE)
+            #my_metadata = parse_adm_xml("dtm_axml_v2_sadm.xml", ADM_XML_MODE_FILE)
+            #my_metadata = parse_adm_xml("eac_axml_v2_sadm.xml", ADM_XML_MODE_FILE)
+            #my_metadata = parse_adm_xml("skip.sadm.emission.profile.compliant_v2.xml", ADM_XML_MODE_FILE)
+            my_metadata = parse_adm_xml("complimentary_objects_v2.xml", ADM_XML_MODE_FILE)
 
         endsecs = time.time()
         call_time = (endsecs - startsecs) / loop_counter

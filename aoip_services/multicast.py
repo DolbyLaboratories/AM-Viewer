@@ -27,7 +27,7 @@
 import socket
 import struct
 import sys
-import netifaces
+import scapy.all as scapy
 import platform
 
 class MulticastGroup:
@@ -44,7 +44,7 @@ class MulticastGroup:
         """
 
         self.interface = interface
-        self.localIp = netifaces.ifaddresses(interface)[netifaces.AF_INET][0]['addr']
+        self.localIp = scapy.get_if_addr(interface)
         self.port = port
         self.address = address
         # create socket
