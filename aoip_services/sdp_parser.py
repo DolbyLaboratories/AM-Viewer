@@ -34,6 +34,8 @@ class sdp_parser:
     port = 0
     session_name = ""
     channels = 0
+    dit = 0
+    raw = ""
 
     def __init__(self, sdp_text):
         for line in sdp_text.splitlines():
@@ -58,18 +60,33 @@ class sdp_parser:
                                 self.channels = int(format[2])
                             else:
                                 self.channels = 0
+                    elif body[0].find("fmtp") != -1 and len(body):
+                        for token in body:
+                            if len(token) > 4 and token[0:4] == "DIT=":
+                                dit_hex = token[4:]
+                                self.dit = int(dit_hex, 16)
+        self.raw = sdp_text
+
+    def get_info(self):
+        output = "Name:" + self.session_name + "\n"
+        output = output + "Type: " + self.type + "\n"
+        output = output + "Multicast address: " + self.address + "\n"
+        output = output + "Port: " + str(self.port) + "\n"
+        output = output + "Codec: " + self.codec + "\n"
+        if self.codec == "ST2110-41":
+            output = output + "DIT: " + hex(self.dit) + "\n"
+        output = output + "Sampling Frequency: " + str(self.fs) + "Hz\n"
+        if self.codec != "ST2110-41":
+            output = output + "No of channels: " + str(self.channels) + "\n"
+        return output
+
+    def get_raw(self):
+        return self.raw
 
     def print(self):
         print("SDP Contents")
         print("============")
-        print("Name:", self.session_name)
-        print("Type: ", self.type)
-        print("Multicast address: ", self.address)
-        print("Port", self.port)
-        print("Codec: ", self.codec)
-        print("Sampling Frequency: ", self.fs,"Hz")
-        print("No of channels:", self.channels)
-
+        print(self.get_info())
 
     def isAM824(self):
         return((self.codec == "AM824") and (self.fs == 48000) and (self.channels == 2))

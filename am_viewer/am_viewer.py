@@ -24,9 +24,9 @@
  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  OF THE POSSIBILITY OF SUCH DAMAGE.
 """
-
-
+import tkinter
 from tkinter import *
+from tkinter import ttk
 from tkinter.filedialog import SaveFileDialog, asksaveasfile
 from tkinter import messagebox
 import time
@@ -73,7 +73,7 @@ import aoip_services.aoip_discovery
 import aoip_services.multicast
 from scapy.all import conf
 
-__version__ = "4.0.2"
+__version__ = "4.1.1"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -503,6 +503,7 @@ class pmdDeframer:
         right_not_left = None
         sADM_assemble_flag = None
         sADM_format_flag = None
+        dit = None # only value for -41
 
         def __init__(self):
             self.payloads = []
@@ -513,7 +514,8 @@ class pmdDeframer:
             self.right_not_left = None
             self.sADM_assemble_flag = None
             self.sADM_format_flag = None
-
+            self.dit = None # only value for -41
+ 
         def is_sADM(self):
             if self.format == "SADM":
                 return True
@@ -537,6 +539,9 @@ class pmdDeframer:
                 return True
             else:
                 return False
+
+        def get_dit(self):
+            return self.dit
 
         def get_sADM_assemble_flag(self):
             return self.sADM_assemble_flag
@@ -634,7 +639,9 @@ class pmdDeframer:
         first_packet = (segment_data_offset == 0)
 
         # check we have a recognizable DIT i.e. sADM or PMD
-        if (data_item_type != 0x3ff000) and (data_item_type != 0x3ff001):
+        if ((data_item_type != 0x3ff000) and  # Experimental S-ADM
+           (data_item_type != 0x100) and    # Production S-ADM
+           (data_item_type != 0x3ff001)):    # PMD
             # if not then discard
             return
 
@@ -652,7 +659,7 @@ class pmdDeframer:
         if last_packet:
             # last packet
             # only sADM supported
-            if data_item_type == 0x3ff000:
+            if data_item_type == 0x3ff000 or data_item_type == 0x100:
                 format = "SADM"
             else:
                 # unknown frame format
@@ -667,6 +674,7 @@ class pmdDeframer:
                 next_frame.sADM_format_flag = 1
                 next_frame.bit_depth = 16
                 next_frame.format = format
+                next_frame.dit = data_item_type
                 next_frame.payloads = [self.payloads]
                 next_frame.container = "ST2110-41"
                 next_frame.subframe_mode = None
@@ -882,6 +890,7 @@ class PmdAdmDisplayGUI:
     audioService = None
     XMLViewerRequest = False
     XMLSaveRequest = False
+    SDPViewerRequest = False
     discoveryService = None
     start_time = 0
     debug = False
@@ -1088,6 +1097,11 @@ class PmdAdmDisplayGUI:
         self.admProfile = Label(self.infoFrame, text="           ", relief=SUNKEN, bg='#B3B4C8')
         self.admProfile.pack(side=LEFT)
 
+        dit_label = Label(self.infoFrame, text="DIT Value")
+        dit_label.pack(side=LEFT)
+        self.ditLabel = Label(self.infoFrame, text="           ", relief=SUNKEN, bg='#B3B4C8')
+        self.ditLabel.pack(side=LEFT)
+
         audio_beds_label = Label(master, text="Audio Beds")
         audio_beds_label.pack(fill=X)
 
@@ -1260,8 +1274,10 @@ class PmdAdmDisplayGUI:
 
         button = Button(master, text="View XML", command=self.view_XML)
         button2 = Button(master, text="Save XML", command=self.save_XML)
+        button3 = Button(master, text="View SDP", command=self.view_SDP)
         button.pack(side=LEFT)
         button2.pack(side=LEFT)
+        button3.pack(side=LEFT)
 
         # Now that the GUI is complete it is safe to start discovery
         # Option menu must exist first so this can't be moved up
@@ -1539,6 +1555,7 @@ class PmdAdmDisplayGUI:
         self.sadmVersion.configure(text="          ")
         self.admVersion.configure(text="           ")
         self.admProfile.configure(text="           ")
+        self.ditLabel.configure(text="           ")
 
         # Reset lights
         self.indicators.reset()
@@ -1623,6 +1640,9 @@ class PmdAdmDisplayGUI:
     def view_XML(self):
         self.XMLViewerRequest = True
     
+    def view_SDP(self):
+        self.SDPViewerRequest = True
+
     def save_XML(self):
         self.XMLSaveRequest = True
 
@@ -1715,6 +1735,12 @@ class PmdAdmDisplayGUI:
         self.updateFromModel(admModelObject.audio_model)
         self.update_adm_info(admModelObject.adm_info)
 
+    def updateStreamDIT(self, dit):
+        if dit == 0:
+            self.ditLabel.configure(text="N/A")
+        else:
+            self.ditLabel.configure(text=hex(dit))
+
     def processNextMessage(self, master):
         if self.messageWaiting():
             [command,messageData] = self.getMessage()
@@ -1773,12 +1799,33 @@ class PmdAdmDisplayGUI:
                     except Exception as e:
                         messagebox.showerror("Error - failed to save", str(e))
                         print(e.with_traceback(), file=sys.stderr)
+            if command == "VIEW SDP":
+                SDPWindow = Toplevel(master)
+                SDPWindow.title("SDP Information")
+                scrollbar = Scrollbar(SDPWindow)
+                sdp_text = Text(SDPWindow, width=80, height=10, relief=SUNKEN, borderwidth=10)
+                sdp_text.pack(side=TOP)
+                sdp_text.insert(tkinter.END, self.service.sdp.get_info())
+                separator = ttk.Separator(SDPWindow, orient='horizontal')
+                sdp_raw_title = Label(SDPWindow, justify=LEFT, text="Raw SDP Text", relief=RAISED, borderwidth=2)
+                sdp_raw = Text(SDPWindow, width=80, relief=SUNKEN, borderwidth=10, yscrollcommand=scrollbar.set)
+                scrollbar.config(command=sdp_raw.yview)
+                separator.pack(side=TOP)
+                sdp_raw_title.pack(side=TOP)
+                scrollbar.pack(side=RIGHT, fill=Y)
+                sdp_raw.pack(side=TOP)
+                sdp_raw.insert(tkinter.END, self.service.sdp.get_raw())
+
+                self.SDPViewerRequest = False
+
             if command == "updateModel":
                 self.updateFromModel(messageData)
                 self.lastModelUpdateTime = time.time()
             if command == "updateAdmModel":
                 self.updateFromAdmModel(messageData)
                 self.lastModelUpdateTime = time.time()
+            if command == "updateStreamDIT":
+                self.updateStreamDIT(messageData)
             if command == "updateInd":
                 self.indicators.update()
         # Check to see if model has timed out, Using 2 second timeout for UI
@@ -1818,6 +1865,7 @@ class PmdAdmDisplayGUI:
                             newFrame = deframer.getFrame()
                             if newFrame.is_SMPTE2110_41():
                                 self.indicators.smpte2110_41On()
+                                self.post("updateStreamDIT", newFrame.dit)
                             if newFrame.is_SMPTE2110_31():
                                 self.indicators.smpte2110_31On()
                             try:
@@ -1889,6 +1937,8 @@ class PmdAdmDisplayGUI:
                                     else:
                                         self.post("SAVE XML", xmlText)
                                     self.XMLSaveRequest = False
+                                elif self.SDPViewerRequest:
+                                    self.post("VIEW SDP", None)
 
 
                             except RuntimeError as e:
