@@ -73,7 +73,7 @@ import aoip_services.aoip_discovery
 import aoip_services.multicast
 from scapy.all import conf
 
-__version__ = "4.1.1"
+__version__ = "4.1.2"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -630,9 +630,10 @@ class pmdDeframer:
         if len(payload) < 8:
             # if then discard
             return
+        print("payload length: ", len(payload), "DIL: ", int.from_bytes(payload[2:4], byteorder='big') & 0x1ff)
         data_item_type = int.from_bytes(payload[0:4], byteorder='big')
         data_item_type = data_item_type >> 10
-        data_item_length_words = int.from_bytes(payload[2:4], byteorder='big') & 0x1ff
+        data_item_length_words = (int.from_bytes(payload[2:4], byteorder='big') & 0x1ff) - 1 # minus 1 to exclude first header word
         data_item_length_bytes = data_item_length_words * 4
         last_packet = ((int.from_bytes(payload[2:3], byteorder='big') & 0x2) >> 1) == 1
         segment_data_offset = int.from_bytes(payload[4:8], byteorder='big')
@@ -649,6 +650,13 @@ class pmdDeframer:
         if len(payload) < (data_item_length_bytes + 8):
             # if not then shorten length
             data_item_length_bytes = len(payload) - 8
+            print("Warning: Payload is smaller than SMPTE ST 2110-41 DIL field")
+        # check to see if transmitter is sending correct length
+        if len(payload) > (data_item_length_bytes + 8):
+            print("Warning: Payload is larger than SMPTE ST 2110-41 DIL field, ignoring DIL field")
+            # Use payload size to maintain compatibility with old PMD Studio instances
+            data_item_length_bytes = len(payload) - 8
+
         if first_packet:
             # Strip 2110-41 header
             self.length_bytes = 0
@@ -1894,9 +1902,10 @@ class PmdAdmDisplayGUI:
                                     if xmlText is not None:
                                         try:
                                             xmlTextStr = xmlText.decode("utf-8")
-                                            a = populate_model_from_adm(xmlText, ADM_XML_MODE_STRING)
+                                            a = populate_model_from_adm(xmlTextStr, ADM_XML_MODE_STRING)
                                         except:
                                             self.indicators.sadmError()
+                                            print(xmlText.decode("utf-8"))
                                             if self.debug:
                                                 traceback.print_exc(file=sys.stdout)
                                             raise RuntimeError("SADM XML parsing failed")
