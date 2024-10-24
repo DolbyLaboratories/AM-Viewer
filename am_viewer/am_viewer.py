@@ -73,7 +73,7 @@ import aoip_services.aoip_discovery
 import aoip_services.multicast
 from scapy.all import conf
 
-__version__ = "4.1.2"
+__version__ = "4.1.3"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -630,7 +630,6 @@ class pmdDeframer:
         if len(payload) < 8:
             # if then discard
             return
-        print("payload length: ", len(payload), "DIL: ", int.from_bytes(payload[2:4], byteorder='big') & 0x1ff)
         data_item_type = int.from_bytes(payload[0:4], byteorder='big')
         data_item_type = data_item_type >> 10
         data_item_length_words = (int.from_bytes(payload[2:4], byteorder='big') & 0x1ff) - 1 # minus 1 to exclude first header word
