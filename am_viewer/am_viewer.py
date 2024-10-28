@@ -405,8 +405,7 @@ def get_2127hdr_sadm_xml(frame):
         length2_size = 1 + length2
         length2 = int.from_bytes(frame.payloads[0][byte_count+1:(byte_count+length2_size)], 'big', signed=False)
     # shorten payload by length and shave any excess
-    # add 2 because length doesn not include version or format
-    frame.payloads[0] = frame.payloads[0][0:byte_count + 2 + length2_size + length2]
+    frame.payloads[0] = frame.payloads[0][0:byte_count + length2_size + length2]
     byte_count += length2_size
     version = frame.payloads[0][byte_count]
     if not version == 0:
