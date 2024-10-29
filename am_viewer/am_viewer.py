@@ -73,7 +73,7 @@ import aoip_services.aoip_discovery
 import aoip_services.multicast
 from scapy.all import conf
 
-__version__ = "4.1.4"
+__version__ = "4.1.5"
 
 class AudioObjectHeadings:
     TYPE = 0
@@ -389,6 +389,7 @@ def get_2127hdr_sadm_xml(frame):
     byte_count += 1
     # Reject if identifier is wrong or too small for a 1 byte payload
     if not identifier == 2 or len(frame.payloads[0]) < 11:
+        print("Error: Expected ST2127 identifier value of 2, received ", identifier)
         return None
     # length from Table 1 of SMPTE ST 2127-1
     length1 = int.from_bytes(frame.payloads[0][byte_count:byte_count+4], 'big', signed=False)
@@ -398,6 +399,7 @@ def get_2127hdr_sadm_xml(frame):
     payload_tag = frame.payloads[0][byte_count]
     byte_count += 1
     if not payload_tag == 0x12: # payload tag value from SMPTE ST 2127-10 Table 1
+        print("Error: expcted ST2127 payload tag value of 12, received ", payload_tag)
         return None
     length2 = frame.payloads[0][byte_count] & 0x7f
     length2_size = 1
@@ -409,10 +411,12 @@ def get_2127hdr_sadm_xml(frame):
     byte_count += length2_size
     version = frame.payloads[0][byte_count]
     if not version == 0:
+        print("Error: Expected ST2127 version 0, received ", version)
         return None # unknown version
     byte_count += 1
     format = frame.payloads[0][byte_count]
     if format > 1:
+        print("Error: Expected ST2127 format value of 0 or 1, received ", format)
         return None # unknown format
     byte_count += 1
     if format == 1:
@@ -421,6 +425,7 @@ def get_2127hdr_sadm_xml(frame):
             adm_xml = zlib.decompress(gzip_data, 15 + 32)
         except:
             adm_xml = None
+            print("Error: Gzip decompression failed")
     else:
         adm_xml = frame.payloads[0][byte_count:]
     return adm_xml
@@ -452,6 +457,7 @@ def get_2116hdr_sadm_xml(frame):
             adm_xml = zlib.decompress(gzip_data, 15 + 32)
         except:
             adm_xml = None
+            print("Error: Gzip decompression failed")
     else:
         adm_xml = frame.payloads[0][index:]
         # Strip trailing zeros that might exist to round out to whole sample
@@ -647,11 +653,13 @@ class pmdDeframer:
         # check to see if payload is big enough according to signaled length
         if len(payload) < (data_item_length_bytes + 8):
             # if not then shorten length
-            data_item_length_bytes = len(payload) - 8
             print("Warning: Payload is smaller than SMPTE ST 2110-41 DIL field")
+            print("DIL value:", data_item_length_words + 1, "Expected DIL value:", math.ceil(len(payload) / 4) - 1)
+            data_item_length_bytes = len(payload) - 8
         # check to see if transmitter is sending correct length
         if len(payload) > (data_item_length_bytes + 8):
             print("Warning: Payload is larger than SMPTE ST 2110-41 DIL field, ignoring DIL field")
+            print("DIL value:", data_item_length_words + 1, "Expected DIL value:", math.ceil(len(payload) / 4) - 1)
             # Use payload size to maintain compatibility with old PMD Studio instances
             data_item_length_bytes = len(payload) - 8
 
@@ -1215,6 +1223,7 @@ class PmdAdmDisplayGUI:
                     self.model = parse_pmd_xml(xml_file, PMD_XML_MODE_FILE)
                     xml_file.seek(0)
                 except:
+                    print("Error: parsing of PMD failed")
                     if self.debug:
                         traceback.print_exc(file=sys.stdout)
                     self.exitCode = self.ErrorCodes.ERR_BAD_PMD
@@ -1226,6 +1235,7 @@ class PmdAdmDisplayGUI:
                     self.model = a.audio_model
                     self.update_adm_info(a.adm_info)
                 except:
+                    print("Error: parsing of S-ADM failed")
                     if self.debug:
                         traceback.print_exc(file=sys.stdout)
                     self.exitCode = self.ErrorCodes.ERR_BAD_SADM
