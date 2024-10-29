@@ -73,7 +73,7 @@ import aoip_services.aoip_discovery
 import aoip_services.multicast
 from scapy.all import conf
 
-__version__ = "4.1.5"
+__version__ = "4.1.6"
 
 class AudioObjectHeadings:
     TYPE = 0
