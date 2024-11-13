@@ -43,7 +43,7 @@ class sdp_parser:
             if len(split_line) > 1:
                 header = split_line[0]
                 # Use ; and spaces as delimiters
-                split_line[1].replace(';',' ')
+                split_line[1] = split_line[1].replace(';', ' ')
                 body = split_line[1].split(' ')
                 if header == 's' and len(body) > 0:
                     self.session_name = ' '.join(body[:])
