@@ -1,0 +1,32 @@
+[project]
+name = "am_viewer"
+version = "4.1.8"
+description = "A ST2110-31/41 Serial ADM audio metadata real-time viewer as specified in Recommendation ITU-R BS.2125, ST 2116, ST 2127-2,"
+authors = [
+  { name = "James Cowdery", email = "jtc@dolby.com" },
+]
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3"
+dependencies = ['zeroconf<=0.26.3', 'scapy>=2.5.0']
+
+[project.scripts]
+am_viewer="am_viewer.am_viewer_main:main"
+
+[tool.setuptools.packages.find]
+# All the following settings are optional:
+where = ["src/am_viewer", "src"]  # ["."] by default
+include = ["am_viewer*", "pmd*", "aoip_services*", "adm*", "am_xml_viewer*"]
+namespaces = false  # true by default
+
+[build-system]
+requires = ["setuptools>=61.2", "wheel"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+am_viewer = ['am_viewer/pmd_tool.Darwin','am_viewer/pmd_tool.Linux','am_viewer/pmd_tool.Windows.exe']
