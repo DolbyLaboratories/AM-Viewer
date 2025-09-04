@@ -427,7 +427,7 @@ def get_2127hdr_sadm_xml(frame):
             adm_xml = None
             print("Error: Gzip decompression failed")
     else:
-        adm_xml = frame.payloads[0][byte_count:]
+        adm_xml = frame.payloads[0][byte_count:].rstrip(b'\0x00')
     return adm_xml
 
 def get_2116hdr_sadm_xml(frame):
