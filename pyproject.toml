@@ -1,6 +1,6 @@
 [project]
 name = "am_viewer"
-version = "4.1.8"
+version = "4.1.9"
 description = "A ST2110-31/41 Serial ADM audio metadata real-time viewer as specified in Recommendation ITU-R BS.2125, ST 2116, ST 2127-2,"
 authors = [
   { name = "James Cowdery", email = "jtc@dolby.com" },
