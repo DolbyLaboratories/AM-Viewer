@@ -1,109 +1,317 @@
-# Audio Metadata (AM) Viewer
+# AM-Viewer (oatpp + SvelteKit)
 
+AM-Viewer is a web-based Audio Metadata Viewer:
+- **Backend:** C++17 + **oatpp** HTTP API, tinyxml2, libpcap, zlib
+- **Frontend:** **SvelteKit** (Vite + TypeScript)
 
-## Overview
+AM Viewer supports display of Serialized ADM (ITU-R BS 2125) metadata carried in either SMPTE ST 2110-31 or
+SMPTE ST 2110-41 IP streams. The Dolby E ADM profile and ITU-R BS. 2168 emission profile are supported.
 
-This is a python based realtime viewer for Serialized ADM insde a SMPTE ST 2110 container. Two flavours of SMPTE ST 2110 are supported: SMPTE ST 2110-31 and -41. The is designed to view the Serialized ADM metadata produced by PMD Studio available at https://github.com/DolbyLaboratories/pmd_tool.
-Once running the viewer can detect real-time changes in the metadata and display them in real-time. The purpose of the viewer is to be able to demonstrate the real-time capabilities of the various formats by allowing the dynamic behaviour to be viewed. The viewer also supports static display of the underlying XML representation.
+## Features
 
-The User interface has three main sections:
-- Audio Beds
-- Audio Objects
-- Presentations
+- **Live capture** of ST 2110-31 (AM824) and ST 2110-41 streams from a selected network interface.
+- **Automatic service discovery** (SAP/mDNS) on the selected interface, with manual selection by pasting an SDP.
+- **S-ADM decoding** of the carried metadata, including Dolby E program-specific metadata.
+- **Metadata display** of programmes, beds, objects and their cross-references, updated live per frame.
+- **Stream health indicators**: frame counter with continuity-error detection, FPS derived from RTP timestamps, and a measured (real) FPS graph.
+- **XML tools**: view or save the current S-ADM frame as XML, and load offline ADM/S-ADM XML files.
+- **SDP download** for any discovered service.
+- **Log viewer** with level/tag filtering, live tail, download and clear.
+- **Text mode** for headless extraction of S-ADM XML from an interface or a pcap file.
+- **Regression suite** that replays PCAP captures and compares against reference XML.
 
-The audio beds section provides a list of the main audio scenes available. These will normally be channel based and will have a configuration such as 5.1 or 5.1.4 for 5.1 with 4 overhead channels. Normally there will only be a single bed but certain use-cases make use of two beds such as home and away crowd sounds for a live sports broadcast.
+## Repository layout
 
-If the audio bed does not contain the complete audio program and only contains music and effects then additional objects will be required and will be listed in the middle section of the user interface. This will normally include dialogue objects. This is very common where multiple language support is required. Objects that specify divergence signal to the downstream renderer that the object should be rendered as two discrete sound sources left and right of the intended position. This effect is sometimes used for dialogue objects.
+| Path | Purpose |
+|------|---------|
+| `src/main.cpp` | oatpp server entry point |
+| `src/web/` | API controller, app state, XML parser, capture service |
+| `src/model/` | shared metadata model structs |
+| `frontend/` | SvelteKit WebUI |
+| `tests/` | regression suite |
+| `pcap/` | PCAP files used for regression replay |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architecture diagram of the frontend, backend and library dependencies |
 
-The list of presentations represent a set configurations that could be made available to use. Each presentation specifies a bed and selection of objects or elements to be included. Each presentation has a name and the language used for the name is specified as well as the language of the audio itself which is specified as the presentation language. Each presentation can be monitored by pressing the buttons on the left hand side. If the buttons are not enabled then GStreamer has not been detected as being installed. Pressing a button twice switches the audio off. The audio playback will react to changes in gain and object X position. Changes in object Y and Z position can not be detected as only stereo playback is supported.
+## Build
 
-![Screenshot of AM Viewer](am_viewer.png)
-## General System Requirements
+One-step build scripts build the backend (Conan + CMake into `build-oat/`) and then the frontend (`npm install && npm run build`):
 
-MacOS, Windows and Linux supported.
+| Platform | Script |
+|----------|--------|
+| macOS (arm64) | `./build-macos.sh` |
+| Linux (x86_64, GCC) | `./build-linux.sh` |
+| Windows (x86_64, MSVC) | `build-windows.bat` |
 
-Python 3 (Tested with Python v3.8.1 from python.org)
+The steps below build the backend manually.
 
-Python Modules (install using PIP)
-scapy (2.5.0 or later), zeroconf (0.26.3 or earlier),
+### Prerequisites
 
-## Windows Requirements
+- Conan 2.x
+- CMake 3.16+
+- Node.js and npm (frontend)
+- C++17 compiler (clang 16+ on macOS)
+- libpcap and zlib (via Conan)
 
-NPcap (https://nmap.org/npcap/)
+### Install Conan dependencies
 
-## Mac OS Requirements
+```bash
+conan install . --output-folder=build-oat --build=missing \
+  -pr:h=conan/profiles/macos-arm64-clang16 \
+  -pr:b=conan/profiles/macos-arm64-clang16
+```
 
-May require the use of the "-libpcap" switch. If using homebrew then Tkinter must be install via `brew install python-tk`
+### Configure + build
 
-## Linux Requirements
+```bash
+cmake -S . -B build-oat -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE=build-oat/build/Release/generators/conan_toolchain.cmake
+cmake --build build-oat --parallel
+```
 
-As well as Python, some distros may require Tkinter to be installed e.g. on Ubuntu: `sudo apt-get install python3-tk`
+On Windows the binary is `build-oat\Release\am_viewer.exe`.
 
-Before running allow python and tcpdump to open raw sockets. Failure to do this will result in permission problems when packet reception is attempted.
+### Run backend
 
-`setcap cap_net_raw=eip <python executable>`
+```bash
+./build-oat/am_viewer
+```
 
-`setcap cap_net_raw=eip <tcpdump executable> (normally /usr/sbin/tcpdump)`
+Backend listens on `http://localhost:8000`.
 
-## Audio Playback Support System Requirements
+### Command line options
 
-To enable the audio playback feature, GStreamer must be installed. This will be detected on startup and the presentation selection buttons will be enabled. Make sure that gst-launch-1.0 is in the path.
+Show all options:
 
-### Windows GStreamer installation
+```bash
+./build-oat/am_viewer --help
+```
 
-See https://gstreamer.freedesktop.org/documentation/installing/on-windows.html and https://gstreamer.freedesktop.org/data/pkg/windows/. Any package type should work although msvs was used for testing
+| Option | Value | Description |
+|---|---|---|
+| `-h`, `--help` | none | Show command usage. |
+| `--help-all` | none | Show command usage including generic Qt options. |
+| `-v`, `--version` | none | Print version and exit. |
+| `--xml` | `<file>` | Load an ADM/S-ADM XML file at startup. |
+| `--sdp` | `<file>` | Load SDP file to preconfigure capture target. |
+| `--debug` | none | Enable debug logging. |
+| `--libpcap` | none | Enable libpcap path (where supported by current runtime mode). |
+| `--text` | none | Run in non-GUI text mode (no web server/frontend). |
+| `--interface` | `<name>` | Capture interface for text mode (for example `en0`). |
+| `--pcap` | `<file>` | Replay packets from a pcap file in text mode. |
+| `--address` | `<ip>` | Destination multicast/unicast address filter for text mode. |
+| `--port` | `<port>` | Destination UDP port filter for text mode. |
+| `--codec` | `AM824`\|`ST2110-41` | Payload codec/container used in text mode. |
+| `--timeout-ms` | `<ms>` | Text mode timeout in milliseconds (default: `10000`). |
+| `--xml-frames` | `<count>` | Number of XML frames to capture before exit in text mode (default: `1`). |
+| `--save-xml` | `<file>` | Write captured XML payload to file in text mode. |
 
-### Mac OS GStreamer installation
+Text mode rules:
+- `--text` requires exactly one input source: `--interface` or `--pcap`.
+- `--text` requires `--codec`.
+- For `--interface`, both `--address` and `--port` are required.
+- For `--pcap`, `--address` and `--port` are optional, but if one is set the other must also be set.
 
-The easiest way is to install Homebrew and then use `brew install gstreamer gst-plugins-base gst-plugins-good`
+Examples:
 
-### Linux (Ubuntu) installation
+```bash
+# Start backend with an offline XML file preloaded
+./build-oat/am_viewer --xml xml/51_me_2d_ad.sadm.xml
 
-Ubuntu generally comes with GStreamer preinstalled. If not then `sudo apt-get install gstreamer1.0-tools`
+# Start backend with explicit SDP and debug logs
+./build-oat/am_viewer --sdp /absolute/path/session.sdp --debug
 
-## Installation
+# Text mode from live interface
+./build-oat/am_viewer --text --interface en0 --address 239.100.10.1 --port 5004 --codec ST2110-41 --xml-frames 1
 
-`pip3 install am_viewer`
+# Text mode from pcap replay
+./build-oat/am_viewer --text --pcap ./pcap/st2110-31_51_me.sadm.pcap --codec AM824 --xml-frames 1 --save-xml /tmp/out.xml
+```
 
-## Instructions
+### Run full app (backend + frontend together)
 
-If installed type `am_viewer`. If not installed, execute the run script.
+```bash
+./run-am-viewer.sh
+```
 
-The viewer can use either an XML or a IP stream as input. To use a file as input use the -xml option to specify the filename. If a stream is used as input then there are two possible ways for the viewer to obtain RTP session information. Either an SDP file can be provided using the -sdp option or the stream can be discovered using the Ravenna discovery protocol (Bonjour & RTSP).
+Without auto-opening a browser tab:
 
-If XML file mode is used the display will immediately update its display based on the XML file. The only control at this point is to quit the application. This is essentially a debug mode.
+```bash
+./run-am-viewer.sh --no-browser
+```
 
-The stream mode is used then a list of interfaces and a list of available services will be provided on the bottom option bar. Once the appropriate interface and service has been selected then the 'Run' button can be pressed to start the monitoring of the stream. If more than one service is available then the service list can be used to switch between services. If the '-sdp' option was used then one option in the service list should correspond to the sdp file.
+Windows (PowerShell or Command Prompt):
 
-When receiving a stream the 'XML' can be pressed at anytime to yield a static XMl snapshot. The XML tree can be explored by expand the various levels of the tree in the XML viewer windows.
+```bat
+run-am-viewer.bat
+```
 
-Several indicators on the bottom bar show status. The PMD indicator will be green when receiving PMD and grey when not. If an error is received the PMD indicator will flash or stay red for continuous errors. The SADM and AES-X242 indicators work in the same way. The subframe-mode / frame mode indicators indicate whether the received stream is using the frame mode or subframe mode of the SMPTE ST 337 container format inside the SMPTE 2110-31 stream. This indicator is not applicable for AES-X242 streams which do not use SMPTE frames.
+Without auto-opening a browser tab:
 
-If receiving the 
+```bat
+run-am-viewer.bat --no-browser
+```
 
-## Known Limitations
+If PowerShell execution policy blocks the script, run once:
 
-Only sADM full frame mode is supported. Both gzip and plain XML sADM modes are supported but only gzip has been thoroughly tested.
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
 
-When playing back presentations that include VDS (Audio Description) dialogue objects. The main audio is not ducked as it should be but rather everything is statically mixed. To add the ducking requires a new custom gstreamer plug-in so this is unlikely to fixed in the next version.
+Temporary (current shell only, no permanent policy change):
 
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
 
-## License
+This launches both services concurrently. The backend binary is found in `build-oat/` (or `build/`); the frontend spawns and manages it. On Linux/macOS the script serves the production frontend build (`vite preview`) and rebuilds it automatically if `frontend/src` is newer than `frontend/build`; on Windows it runs the dev server and runs `npm install` if `node_modules` is missing. By default it opens the frontend URL in a browser tab (unless `--no-browser` is used). Use the **Quit** button in the web UI to stop both processes.
 
- AM Viewer
- Copyright (c) 2024, Dolby Laboratories Inc.
- All rights reserved.
- 
- Redistribution and use in source and binary forms, with or without modification, are permitted
- provided that the following conditions are met:
- 
- 1. Redistributions of source code must retain the above copyright notice,
- this list of conditions and the following disclaimer.
-    
- 2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions
-    and the following disclaimer in the documentation and/or other materials provided with the distribution.
-    
- 3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or
-    promote products derived from this software without specific prior written permission.
- 
- THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR APARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+All backend CLI options are forwarded through the launcher scripts (Linux/macOS and Windows). Examples:
+
+```bash
+./run-am-viewer.sh --xml /absolute/path/to/file.sadm.xml
+./run-am-viewer.sh --sdp /absolute/path/to/file.sdp --debug
+./run-am-viewer.sh --text --pcap ./pcap/st2110-31_51_me.sadm.pcap --xml-frames 1 --save-xml /tmp/out.xml
+./run-am-viewer.sh --help
+./run-am-viewer.sh --version
+```
+
+`--help`, `--help-all`, `--version`, and `--text` run in backend-only mode (frontend is not started).
+
+## Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev      # development server
+npm run build   # production build
+```
+
+The frontend runs on `http://localhost:5173`. Its server routes call the backend at `localhost:8000` (override with `AMV_BACKEND_HOST` / `AMV_BACKEND_PORT`). When `AMV_BIN` is set to the backend binary, the frontend starts and stops the backend itself; otherwise start `am_viewer` manually.
+
+## API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/health` | Service health check |
+| `GET` | `/api/model` | Model summary (counts) |
+| `GET` | `/api/interfaces` | List available network interfaces |
+| `GET` | `/api/ui-state` | Full UI state: indicators, ADM metadata, beds, objects, presentations |
+| `POST` | `/api/load-xml?file=<abs-path>` | Parse and load an ADM/S-ADM XML file |
+| `POST` | `/api/service/select` | Save network service selection (interface, address, port, codec, …) |
+| `POST` | `/api/capture/start` | Start live pcap capture on the selected interface/address/port |
+| `POST` | `/api/capture/stop` | Stop live pcap capture |
+| `POST` | `/api/app/exit` | Stop capture and terminate the backend process |
+
+## Basic UI Instructions
+
+Open `http://localhost:5173` (opened automatically by `run-am-viewer.sh`). The page shows "Connecting to server..." / "Connecting to backend..." until the backend is reachable.
+
+### Receiving a stream
+
+1. In **Service Selection** (left panel), choose a network interface from the **Interface** drop-down.
+2. Wait while the viewer listens; discovered streams appear as buttons in the list.
+3. Click a stream to select it. Capture starts and metadata appears once the first frame arrives.
+4. If a stream is not announced, click **Upload SDP**, paste the SDP text and press **Submit**.
+5. Click **SDP** on a discovered stream to view or **Download** its SDP.
+
+### Stream Info bar
+
+Shown across the top once a stream is selected:
+- Stream name, system, address:port and codec.
+- **Frame Counter**: increments per metadata frame. A continuity issue is flagged here; use its reset control to clear it.
+- **FPS**: rate derived from RTP packet timestamps (sender's intended rate). An issue is flagged if it is unstable and can be reset.
+- **Real FPS graph**: measured frame arrival rate over time.
+
+### Metadata tab
+
+- **S-ADM Info**: S-ADM/ADM version and profile fields.
+- **Programmes**: table of programmes with name, layout, language and element icons (`P` programme, `B` bed, `O` object).
+- **S-ADM Content**: the **Summary** tab lists all audio objects and Dolby E metadata; one tab per programme shows that programme's info, its beds/objects and its Dolby E metadata. Selecting a new stream returns to the first tab.
+- **View XML** / **Save XML**: display or download the current frame as `<stream>-<frame>.sadm.xml`.
+
+### Logs tab
+
+- **Filter** by log level and tag (the badge shows the number of active filters; **Reset all** clears them).
+- **Live** follows new messages; scrolling up pauses the tail.
+- **Download logs** saves the log; **Clear all logs** removes entries after confirmation.
+
+### Quitting
+
+Use the power icon at the top-right and choose **Quit** to stop the frontend and backend (shown when launched via the run scripts).
+
+### Load XML example
+
+```bash
+curl -X POST "http://localhost:8000/api/load-xml?file=/absolute/path/to/file.sadm.xml"
+```
+
+After a successful load, `GET /api/ui-state` returns populated beds, objects, presentations and the S-ADM/ADM version and profile fields, with the S-ADM indicator set to `on`.
+
+## Regression Suite
+
+Run all regression checks (text/XML reference + web UI-state PCAP replay) with a single command:
+
+```bash
+python3 tests/regression_suite.py
+```
+
+This runs:
+1. **XML regression** – extracts text-mode XML from each PCAP and compares against references in `tests/reference_xml/`
+2. **UI-state regression** – starts the backend, replays RTP payloads from each PCAP over UDP, and validates all `/api/ui-state` fields
+
+### Prerequisites
+
+- Python 3.9+
+- `tshark` (Wireshark CLI) in `PATH`
+- Loopback capture access (`lo0` on macOS; may need `sudo` or group membership)
+
+## Dependencies & Licenses
+
+### Backend (C++)
+
+| Project | Version | License | Repository |
+|---------|---------|---------|------------|
+| oatpp | 1.3.0 | Apache 2.0 | https://github.com/oatpp/oatpp |
+| tinyxml2 | 10.0.0 | Zlib | https://github.com/leethomason/tinyxml2 |
+| libpcap | 1.10.5 | BSD 3-Clause | https://www.tcpdump.org/ |
+| zlib | 1.3.1 | Zlib | https://github.com/madler/zlib |
+| CMake | 3.29.6 | BSD 3-Clause | https://cmake.org/ |
+
+### Frontend (SvelteKit)
+
+| Project | Version | License | Repository |
+|---------|---------|---------|------------|
+| Svelte | ^5.55.2 | MIT | https://github.com/sveltejs/svelte |
+| SvelteKit | ^2.57.0 | MIT | https://github.com/sveltejs/kit |
+| @sveltejs/adapter-node | ^5.5.4 | MIT | https://github.com/sveltejs/kit |
+| @sveltejs/vite-plugin-svelte | ^7.0.0 | MIT | https://github.com/sveltejs/vite-plugin-svelte |
+| Vite | ^8.0.7 | MIT | https://github.com/vitejs/vite |
+| TypeScript | ^6.0.2 | Apache 2.0 | https://github.com/microsoft/TypeScript |
+| svelte-check | ^4.4.6 | MIT | https://github.com/sveltejs/language-tools |
+| sveltekit-sse | ^0.14.3 | MIT | https://github.com/razshare/sveltekit-sse |
+| rotating-file-stream | ^3.2.9 | MIT | https://github.com/iccicci/rotating-file-stream |
+| @types/node | ^25.6.0 | MIT | https://github.com/DefinitelyTyped/DefinitelyTyped |
+
+### Build & Test Tools
+
+| Project | License | Repository |
+|---------|---------|------------|
+| Conan | MIT | https://github.com/conan-io/conan |
+| pytest | MIT | https://github.com/pytest-dev/pytest |
+| tshark/Wireshark | GPL 2.0 | https://www.wireshark.org/ |
+
+### Custom options
+
+```bash
+python3 tests/regression_suite.py \
+  --backend ./build-oat/am_viewer \
+  --text-binary ./build-oat/am_viewer \
+  --pcap-dir ./pcap
+```
+
+Generate or refresh XML references:
+
+```bash
+python3 tests/regression_suite.py --generate-reference
+```
+

@@ -1,0 +1,113 @@
+/****************************************************************************
+ *
+ *
+ * Copyright (c) 2026 Dolby International AB.
+ * All rights reserved.
+
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are
+ * met:
+ *
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in
+ *    the documentation and/or other materials provided with the
+ *    distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED
+ * BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+ * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+ * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ ******************************************************************************/
+
+:root{
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    --dp59x-theme-fg: #293033;
+    --dp59x-theme-bg: #192324;
+    --dp59x-theme-bg-root: #171d1d;
+    --dp59x-theme-border: #151818;
+    --dp59x-theme-shadow: #151818b2;
+    --dp59x-theme-button: #3d484d;
+    --dp59x-theme-on-button: #bbbbbb;
+    --dp59x-theme-button-active: #068dca;
+    --dp59x-theme-on-button-active: #ffffff;
+    --dp59x-theme-on-fg: #eeeeee;
+    --dp59x-theme-on-bg: #bbbbbb;
+    --dp59x-theme-error: #b33a3a;
+    --dp59x-theme-warning: #b38f3a;
+    --dp59x-theme-info: #3ab34a;
+    --dp59x-theme-debug: #3a7bb3;
+}
+
+.dp59x-background {
+    background-color: var(--dp59x-theme-bg);
+    color: var(--dp59x-theme-on-bg)
+}
+
+.dp59x-foreground {
+    background-color: var(--dp59x-theme-fg);
+    color: var(--dp59x-theme-on-fg);
+    border-radius: 0.3em;
+    padding: 1em;
+    box-sizing: border-box;
+}
+
+.dp59x-button {
+    background-color: var(--dp59x-theme-button);
+    color: var(--dp59x-theme-on-button);
+    border: none;
+    padding: 0.3em 0.8em;
+    border-radius: 0.3em;
+    box-sizing: border-box;
+    cursor: pointer;
+    opacity: 0.85;
+}
+
+.dp59x-button.red {
+    background-color: #b33a3a;
+    color: #ffffff;
+}
+
+.dp59x-button.circular {
+    border-radius: 50%;
+    aspect-ratio: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3em;
+}
+
+.dp59x-button:hover {
+    opacity: 1;
+}
+
+.dp59x-button.active {
+    background-color: var(--dp59x-theme-button-active);
+    color: var(--dp59x-theme-on-button-active);
+}
+
+.dp59x-select {
+    background-color: var(--dp59x-theme-button);
+    color: var(--dp59x-theme-on-button);
+    border: none;
+    padding: 0.3em 0.8em;
+    border-radius: 0.3em;
+    box-sizing: border-box;
+    cursor: pointer;
+    outline: none;
+}
