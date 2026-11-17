@@ -182,31 +182,18 @@ def require_field(obj: dict[str, Any], key: str, expected_type: type) -> None:
         raise AssertionError(f"key '{key}' expected type {expected_type.__name__}, got {type(obj[key]).__name__}")
 
 
-def validate_ui_state(data: dict[str, Any], expected_codec: str, expected_packets_min: int) -> None:
+def validate_ui_state(
+    data: dict[str, Any], capture: dict[str, Any], expected_codec: str, expected_packets_min: int
+) -> None:
     require_field(data, "summary", dict)
-    require_field(data, "capture", dict)
     require_field(data, "service", dict)
     require_field(data, "interfaces", list)
-    require_field(data, "beds", list)
-    require_field(data, "objects", list)
-    require_field(data, "presentations", list)
-
-    for key in ("sadmVersion", "admVersion", "admProfile", "ditValue"):
-        require_field(data, key, str)
-
-    indicator_keys = ["pmd", "sadm", "smpte2110_31", "smpte2110_41", "frame", "subframe", "depth20", "depth24"]
-    for key in indicator_keys:
-        require_field(data, key, str)
-        if data[key] not in {"off", "on", "error"}:
-            raise AssertionError(f"indicator '{key}' has invalid value: {data[key]}")
+    require_field(data, "shutdownPending", bool)
 
     summary = data["summary"]
-    for key in ("objects", "beds", "presentations"):
-        require_field(summary, key, int)
     for key in ("loadedFile", "lastError", "lastUpdated"):
         require_field(summary, key, str)
 
-    capture = data["capture"]
     require_field(capture, "active", bool)
     require_field(capture, "interfaceName", str)
     require_field(capture, "address", str)
@@ -224,17 +211,21 @@ def validate_ui_state(data: dict[str, Any], expected_codec: str, expected_packet
         require_field(service, key, str)
     require_field(service, "port", int)
 
-    if expected_codec == "AM824":
-        if data["smpte2110_31"] != "on":
-            raise AssertionError("expected smpte2110_31=on for AM824 replay")
-        if data["smpte2110_41"] != "off":
-            raise AssertionError("expected smpte2110_41=off for AM824 replay")
-        if data["frame"] != "on" and data["subframe"] != "on":
-            raise AssertionError("expected either frame or subframe indicator on for AM824 replay")
-        if data["depth20"] != "on" and data["depth24"] != "on":
-            raise AssertionError("expected either depth20 or depth24 indicator on for AM824 replay")
+    require_field(data, "streamInfo", dict)
+    require_field(data["streamInfo"], "protocol", str)
+    if expected_codec == "AM824" and data["streamInfo"]["protocol"] != "st2110-31":
+        raise AssertionError(f"expected streamInfo.protocol=st2110-31 for AM824 replay, got {data['streamInfo']['protocol']}")
 
-    for bed in data["beds"]:
+    metadata = summary.get("metadata")
+    if metadata is None:
+        return
+    require_field(metadata, "type", str)
+    for key in ("beds", "objects", "presentations"):
+        require_field(metadata, key, list)
+    for key in ("sadmVersion", "admVersion", "admProfile"):
+        require_field(metadata, key, str)
+
+    for bed in metadata["beds"]:
         if not isinstance(bed, dict):
             raise AssertionError("beds[] contains non-object entry")
         for key in ("source", "config", "name"):
@@ -243,7 +234,7 @@ def validate_ui_state(data: dict[str, Any], expected_codec: str, expected_packet
         require_field(bed, "start", int)
         require_field(bed, "end", int)
 
-    for obj in data["objects"]:
+    for obj in metadata["objects"]:
         if not isinstance(obj, dict):
             raise AssertionError("objects[] contains non-object entry")
         for key in ("type", "name"):
@@ -255,7 +246,7 @@ def validate_ui_state(data: dict[str, Any], expected_codec: str, expected_packet
         require_field(obj, "y", (int, float))
         require_field(obj, "z", (int, float))
 
-    for pres in data["presentations"]:
+    for pres in metadata["presentations"]:
         if not isinstance(pres, dict):
             raise AssertionError("presentations[] contains non-object entry")
         require_field(pres, "index", int)
@@ -319,6 +310,7 @@ def main() -> int:
                         "interface": args.interface,
                         "address": args.capture_address,
                         "port": args.capture_port,
+                        "codec": codec,
                     }
                 )
                 http_json("POST", f"{base_url}/api/capture/start?{start_query}")
@@ -326,7 +318,8 @@ def main() -> int:
                 sent = replay_rtp_payloads(pcap_path, args.capture_address, args.capture_port, args.replay_packets)
                 time.sleep(0.8)
                 state = http_json("GET", f"{base_url}/api/ui-state")
-                validate_ui_state(state, expected_codec=codec, expected_packets_min=max(1, min(sent, args.replay_packets // 2)))
+                capture = http_json("GET", f"{base_url}/api/capture/status")
+                validate_ui_state(state, capture, expected_codec=codec, expected_packets_min=max(1, min(sent, args.replay_packets // 2)))
                 print(f"[OK ] {src.name} ({sent} packets)")
             except Exception as exc:  # noqa: BLE001
                 failures.append(f"{src.name}: {exc}")

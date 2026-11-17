@@ -45,12 +45,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--text-binary",
-        default=str(root / "build" / "build" / "Release" / "am_viewer"),
+        default=str(root / "build-oat" / "am_viewer"),
         help="Path to text-mode capable am_viewer executable",
     )
     parser.add_argument(
         "--backend",
-        default=str(root / "build" / "build" / "Release" / "am_viewer"),
+        default=str(root / "build-oat" / "am_viewer"),
         help="Path to backend executable for UI-state regression",
     )
     parser.add_argument(

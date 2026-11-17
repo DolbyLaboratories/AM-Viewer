@@ -166,7 +166,11 @@ def validate_state(state: dict[str, Any], xml_path: Path, expected_profiles: int
     if last_error:
         raise AssertionError(f"summary.lastError is not empty: {last_error}")
 
-    adm_profiles = state.get("admProfiles")
+    metadata = summary.get("metadata")
+    if not isinstance(metadata, dict):
+        raise AssertionError("ui-state missing summary.metadata object")
+
+    adm_profiles = metadata.get("admProfiles")
     if not isinstance(adm_profiles, list):
         raise AssertionError("ui-state missing admProfiles list")
 
