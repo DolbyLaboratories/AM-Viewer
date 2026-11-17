@@ -32,15 +32,69 @@ SMPTE ST 2110-41 IP streams. The Dolby E ADM profile and ITU-R BS. 2168 emission
 | `pcap/` | PCAP files used for regression replay |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Architecture diagram of the frontend, backend and library dependencies |
 
-## Build
+## Getting up and running quickly
 
-One-step build scripts build the backend (Conan + CMake into `build-oat/`) and then the frontend (`npm install && npm run build`):
+### One step build
+
+These build scripts build the backend (Conan + CMake into `build-oat/`) and then the frontend (`npm install && npm run build`):
 
 | Platform | Script |
 |----------|--------|
 | macOS (arm64) | `./build-macos.sh` |
 | Linux (x86_64, GCC) | `./build-linux.sh` |
 | Windows (x86_64, MSVC) | `build-windows.bat` |
+
+### Run full app (backend + frontend together)
+
+```bash
+./run-am-viewer.sh
+```
+
+Without auto-opening a browser tab:
+
+```bash
+./run-am-viewer.sh --no-browser
+```
+
+Windows (PowerShell or Command Prompt):
+
+```bat
+run-am-viewer.bat
+```
+
+Without auto-opening a browser tab:
+
+```bat
+run-am-viewer.bat --no-browser
+```
+
+If PowerShell execution policy blocks the script, run once:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Temporary (current shell only, no permanent policy change):
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+```
+
+This launches both services concurrently. The backend binary is found in `build-oat/` (or `build/`); the frontend spawns and manages it. On Linux/macOS the script serves the production frontend build (`vite preview`) and rebuilds it automatically if `frontend/src` is newer than `frontend/build`; on Windows it runs the dev server and runs `npm install` if `node_modules` is missing. By default it opens the frontend URL in a browser tab (unless `--no-browser` is used). Use the **Quit** button in the web UI to stop both processes.
+
+All backend CLI options are forwarded through the launcher scripts (Linux/macOS and Windows). Examples:
+
+```bash
+./run-am-viewer.sh --xml /absolute/path/to/file.sadm.xml
+./run-am-viewer.sh --sdp /absolute/path/to/file.sdp --debug
+./run-am-viewer.sh --text --pcap ./pcap/st2110-31_51_me.sadm.pcap --xml-frames 1 --save-xml /tmp/out.xml
+./run-am-viewer.sh --help
+./run-am-viewer.sh --version
+```
+
+`--help`, `--help-all`, `--version`, and `--text` run in backend-only mode (frontend is not started).
+
+## Manual Build
 
 The steps below build the backend manually.
 
@@ -50,7 +104,6 @@ The steps below build the backend manually.
 - CMake 3.16+
 - Node.js and npm (frontend)
 - C++17 compiler (clang 16+ on macOS)
-- libpcap and zlib (via Conan)
 
 ### Install Conan dependencies
 
@@ -70,7 +123,7 @@ cmake --build build-oat --parallel
 
 On Windows the binary is `build-oat\Release\am_viewer.exe`.
 
-### Run backend
+## Run backend
 
 ```bash
 ./build-oat/am_viewer
@@ -127,57 +180,8 @@ Examples:
 ./build-oat/am_viewer --text --pcap ./pcap/st2110-31_51_me.sadm.pcap --codec AM824 --xml-frames 1 --save-xml /tmp/out.xml
 ```
 
-### Run full app (backend + frontend together)
 
-```bash
-./run-am-viewer.sh
-```
-
-Without auto-opening a browser tab:
-
-```bash
-./run-am-viewer.sh --no-browser
-```
-
-Windows (PowerShell or Command Prompt):
-
-```bat
-run-am-viewer.bat
-```
-
-Without auto-opening a browser tab:
-
-```bat
-run-am-viewer.bat --no-browser
-```
-
-If PowerShell execution policy blocks the script, run once:
-
-```powershell
-Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-```
-
-Temporary (current shell only, no permanent policy change):
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-```
-
-This launches both services concurrently. The backend binary is found in `build-oat/` (or `build/`); the frontend spawns and manages it. On Linux/macOS the script serves the production frontend build (`vite preview`) and rebuilds it automatically if `frontend/src` is newer than `frontend/build`; on Windows it runs the dev server and runs `npm install` if `node_modules` is missing. By default it opens the frontend URL in a browser tab (unless `--no-browser` is used). Use the **Quit** button in the web UI to stop both processes.
-
-All backend CLI options are forwarded through the launcher scripts (Linux/macOS and Windows). Examples:
-
-```bash
-./run-am-viewer.sh --xml /absolute/path/to/file.sadm.xml
-./run-am-viewer.sh --sdp /absolute/path/to/file.sdp --debug
-./run-am-viewer.sh --text --pcap ./pcap/st2110-31_51_me.sadm.pcap --xml-frames 1 --save-xml /tmp/out.xml
-./run-am-viewer.sh --help
-./run-am-viewer.sh --version
-```
-
-`--help`, `--help-all`, `--version`, and `--text` run in backend-only mode (frontend is not started).
-
-## Frontend
+## Run Frontend
 
 ```bash
 cd frontend
