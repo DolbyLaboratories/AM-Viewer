@@ -1,0 +1,47 @@
+# macOS
+.DS_Store
+
+# CMake / C++ build artifacts
+build/
+build-oat/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+CMakeUserPresets.json
+Makefile
+compile_commands.json
+*.vcxproj
+*.vcxproj.filters
+*.sln
+.vs/
+out/
+.vscode/
+frontend/.vscode/
+
+# Conan generated environment scripts
+conanbuildenv-*.sh
+conanrunenv-*.sh
+deactivate_conanbuild.sh
+deactivate_conanrun.sh
+
+# Frontend (Vite / Node)
+frontend/node_modules/
+frontend/dist/
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+
+
+.cache/
+
+CLAUDE.md

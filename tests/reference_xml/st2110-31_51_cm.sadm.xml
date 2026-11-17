@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<frame version="ITU-R_BS.2125-1">
+  <frameHeader>
+    <frameFormat frameFormatID="FF_00000000001" type="full" start="00:00:00.00000" duration="00:00:00.01920S48000" timeReference="local" flowID="77277547-55a7-4126-a95a-778409fc57f5">
+    </frameFormat>
+    <transportTrackFormat transportID="TP_0001" transportName="Audio Interface" numIDs="6" numTracks="6">
+      <audioTrack trackID="1" formatLabel="0001" formatDefinition="PCM">
+        <audioTrackUIDRef>ATU_00000001</audioTrackUIDRef>
+      </audioTrack>
+      <audioTrack trackID="2" formatLabel="0001" formatDefinition="PCM">
+        <audioTrackUIDRef>ATU_00000002</audioTrackUIDRef>
+      </audioTrack>
+      <audioTrack trackID="3" formatLabel="0001" formatDefinition="PCM">
+        <audioTrackUIDRef>ATU_00000003</audioTrackUIDRef>
+      </audioTrack>
+      <audioTrack trackID="4" formatLabel="0001" formatDefinition="PCM">
+        <audioTrackUIDRef>ATU_00000004</audioTrackUIDRef>
+      </audioTrack>
+      <audioTrack trackID="5" formatLabel="0001" formatDefinition="PCM">
+        <audioTrackUIDRef>ATU_00000005</audioTrackUIDRef>
+      </audioTrack>
+      <audioTrack trackID="6" formatLabel="0001" formatDefinition="PCM">
+        <audioTrackUIDRef>ATU_00000006</audioTrackUIDRef>
+      </audioTrack>
+    </transportTrackFormat>
+    <profileList>
+      <profile profileName="Advanced sound system: ADM and SADM profile for emission" profileVersion="1" profileLevel="1">ITU-R BS.2168</profile>
+    </profileList>
+  </frameHeader>
+  <audioFormatExtended version="ITU-R_BS.2076-3">
+    <audioProgramme audioProgrammeID="APR_1001" audioProgrammeName="English CM" audioProgrammeLanguage="eng">
+      <audioProgrammeLabel language="eng">English CM</audioProgrammeLabel>
+      <loudnessMetadata>
+        <integratedLoudness>-23.00</integratedLoudness>
+      </loudnessMetadata>
+      <audioContentIDRef>ACO_1001</audioContentIDRef>
+    </audioProgramme>
+    <audioContent audioContentID="ACO_1001" audioContentName="EnglishCM" audioContentLanguage="eng">
+      <audioContentLabel language="eng">Bed 5.1</audioContentLabel>
+      <dialogue mixedContentKind="2">2</dialogue>
+      <loudnessMetadata>
+        <integratedLoudness>-23.00</integratedLoudness>
+      </loudnessMetadata>
+      <audioObjectIDRef>AO_1001</audioObjectIDRef>
+    </audioContent>
+    <audioObject audioObjectID="AO_1001" audioObjectName="EnglishCM" interact="0">
+      <gain gainUnit="dB">0.50</gain>
+      <audioPackFormatIDRef>AP_00010003</audioPackFormatIDRef>
+      <audioTrackUIDRef>ATU_00000001</audioTrackUIDRef>
+      <audioTrackUIDRef>ATU_00000002</audioTrackUIDRef>
+      <audioTrackUIDRef>ATU_00000003</audioTrackUIDRef>
+      <audioTrackUIDRef>ATU_00000004</audioTrackUIDRef>
+      <audioTrackUIDRef>ATU_00000005</audioTrackUIDRef>
+      <audioTrackUIDRef>ATU_00000006</audioTrackUIDRef>
+    </audioObject>
+    <audioTrackUID UID="ATU_00000001">
+      <audioPackFormatIDRef>AP_00010003</audioPackFormatIDRef>
+      <audioChannelFormatIDRef>AC_00010001</audioChannelFormatIDRef>
+    </audioTrackUID>
+    <audioTrackUID UID="ATU_00000002">
+      <audioPackFormatIDRef>AP_00010003</audioPackFormatIDRef>
+      <audioChannelFormatIDRef>AC_00010002</audioChannelFormatIDRef>
+    </audioTrackUID>
+    <audioTrackUID UID="ATU_00000003">
+      <audioPackFormatIDRef>AP_00010003</audioPackFormatIDRef>
+      <audioChannelFormatIDRef>AC_00010003</audioChannelFormatIDRef>
+    </audioTrackUID>
+    <audioTrackUID UID="ATU_00000004">
+      <audioPackFormatIDRef>AP_00010003</audioPackFormatIDRef>
+      <audioChannelFormatIDRef>AC_00010004</audioChannelFormatIDRef>
+    </audioTrackUID>
+    <audioTrackUID UID="ATU_00000005">
+      <audioPackFormatIDRef>AP_00010003</audioPackFormatIDRef>
+      <audioChannelFormatIDRef>AC_00010005</audioChannelFormatIDRef>
+    </audioTrackUID>
+    <audioTrackUID UID="ATU_00000006">
+      <audioPackFormatIDRef>AP_00010003</audioPackFormatIDRef>
+      <audioChannelFormatIDRef>AC_00010006</audioChannelFormatIDRef>
+    </audioTrackUID>
+    <profileList>
+      <profile profileName="Advanced sound system: ADM and SADM profile for emission" profileVersion="1" profileLevel="1">ITU-R BS.2168</profile>
+    </profileList>
+  </audioFormatExtended>
+</frame>
